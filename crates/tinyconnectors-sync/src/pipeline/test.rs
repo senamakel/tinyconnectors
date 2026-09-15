@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use serde_json::json;
 use tinyconnectors_bus::{ConnectorRecord, SyncStage};
 
+use super::json::{end_cursor, flag_at, token_at};
 use super::{
     MIN_PAGE_SIZE, ProviderPage, first_array, is_payload_too_large, next_page_token, pick_str,
     run_sync, shrink_page_size,
@@ -20,6 +21,48 @@ use crate::state::{SyncState, SyncStateStore};
 use crate::{Error, Result};
 
 // ── json helpers ────────────────────────────────────────────────────
+
+#[test]
+fn reads_a_cursor_at_the_pointers_a_toolkit_names() {
+    let value = json!({ "data": { "next_cursor": "c2" } });
+    assert_eq!(
+        token_at(&value, &["/next_cursor", "/data/next_cursor"]).as_deref(),
+        Some("c2")
+    );
+    // A null or blank cursor is how a last page says there is no next one.
+    assert!(token_at(&json!({ "next_cursor": null }), &["/next_cursor"]).is_none());
+    assert!(token_at(&json!({ "next_cursor": " " }), &["/next_cursor"]).is_none());
+}
+
+#[test]
+fn follows_an_end_cursor_only_while_there_is_a_next_page() {
+    let more = json!({ "pageInfo": { "hasNextPage": true, "endCursor": "e1" } });
+    assert_eq!(end_cursor(&more, &["/pageInfo"]).as_deref(), Some("e1"));
+    for done in [
+        json!({ "pageInfo": { "hasNextPage": false, "endCursor": "e1" } }),
+        json!({ "pageInfo": { "endCursor": "e1" } }),
+        json!({ "pageInfo": { "hasNextPage": true, "endCursor": " " } }),
+        json!({}),
+    ] {
+        assert!(end_cursor(&done, &["/pageInfo"]).is_none(), "{done}");
+    }
+}
+
+#[test]
+fn reads_a_flag_only_when_it_is_a_boolean() {
+    assert_eq!(
+        flag_at(
+            &json!({ "data": { "last_page": true } }),
+            &["/last_page", "/data/last_page"]
+        ),
+        Some(true)
+    );
+    assert_eq!(
+        flag_at(&json!({ "last_page": "true" }), &["/last_page"]),
+        None
+    );
+    assert_eq!(flag_at(&json!({}), &["/last_page"]), None);
+}
 
 #[test]
 fn picks_the_first_non_empty_scalar() {
@@ -202,8 +245,8 @@ fn record(id: &str) -> ConnectorRecord {
 fn page(ids: &[&str], next: Option<&str>) -> ProviderPage {
     ProviderPage {
         records: ids.iter().map(|id| record(id)).collect(),
-        versions: Vec::new(),
         next_cursor: next.map(str::to_string),
+        ..ProviderPage::default()
     }
 }
 
@@ -219,6 +262,36 @@ fn context(store: Arc<MemoryStore>, max_items: usize) -> ProviderContext {
         actions: Arc::new(NoActions),
         state: store,
     }
+}
+
+#[tokio::test]
+async fn charges_the_budget_for_every_request_a_page_read_made() {
+    // A provider that runs a lookup before its page read spends two requests
+    // a page. Charging one would let a run spend twice the day's limit.
+    let store = Arc::new(MemoryStore::default());
+    let provider = ScriptedProvider::new(vec![
+        Ok(ProviderPage {
+            requests_used: 2,
+            ..page(&["m1"], Some("p2"))
+        }),
+        Ok(page(&["m2"], None)),
+    ]);
+
+    run_sync(
+        &provider,
+        &context(Arc::clone(&store), 100),
+        SyncReason::Manual,
+    )
+    .await
+    .unwrap();
+
+    let state = SyncState::load(store.as_ref(), "gmail", "conn_1")
+        .await
+        .unwrap();
+    assert_eq!(
+        state.daily_budget.requests_used, 3,
+        "two for the first page, one for a page that did not say"
+    );
 }
 
 #[tokio::test]
@@ -370,6 +443,7 @@ async fn re_ingests_a_record_whose_version_changed() {
         records: vec![record("p1")],
         versions: vec![("p1".to_string(), "v2".to_string())],
         next_cursor: None,
+        requests_used: 1,
     })]);
     let outcome = run_sync(&provider, &context(store, 100), SyncReason::Scheduled)
         .await

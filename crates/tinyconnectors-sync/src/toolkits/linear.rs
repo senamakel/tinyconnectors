@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use super::identity::pick;
 use super::linear_catalog::CURATED;
 use crate::Result;
-use crate::pipeline::{PageSpec, ProviderPage, fetch_page};
+use crate::pipeline::{PageSpec, Paging, ProviderPage, fetch_page};
 use crate::provider::{ConnectorProvider, ProviderContext, ProviderUserProfile};
 use crate::scope::CuratedTool;
 
@@ -20,6 +20,7 @@ const PAGE: PageSpec = PageSpec {
         "/data/issues",
         "/issues",
         "/data/data/issues",
+        "/data/issues/nodes",
         "/data/nodes",
     ],
     id_paths: &["id", "identifier"],
@@ -27,9 +28,20 @@ const PAGE: PageSpec = PageSpec {
     content_paths: &["description", "descriptionData"],
     url_paths: &["url"],
     version_paths: &["updatedAt"],
+    fixed_arguments: &[],
     page_size_arg: "first",
     depth_window: None,
     cursor_arg: "after",
+    // Issues arrive as a GraphQL connection, whose `pageInfo` sits beside its
+    // `nodes`: `endCursor` names the next page only while `hasNextPage` is true.
+    paging: Paging::PageInfo {
+        page_info: &[
+            "/data/pageInfo",
+            "/pageInfo",
+            "/data/data/pageInfo",
+            "/data/issues/pageInfo",
+        ],
+    },
     clean_bodies: false,
 };
 

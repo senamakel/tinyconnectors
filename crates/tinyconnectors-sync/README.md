@@ -68,3 +68,11 @@ catalog, its profile action, and a `PageSpec` naming where its records live.
 The specs list alternatives per field because Composio wraps provider payloads
 inconsistently, and the same field arrives under different names from different
 endpoints of one API.
+
+A spec also says how the next page is named: a token at a path the spec lists
+(Gmail's `nextPageToken`, Notion's `next_cursor`), a GraphQL connection's
+`pageInfo` (Linear), or a page number (GitHub's search, which names no next page
+and serves 1,000 results; `ClickUp`, which counts from zero and flags its last
+page). Arguments a read cannot go without, such as GitHub's search query, are
+fixed in the spec. `ClickUp` walks the account's workspaces itself, because each
+task read has to name one.
