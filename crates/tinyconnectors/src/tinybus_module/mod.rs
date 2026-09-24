@@ -414,7 +414,6 @@ impl ConnectorService {
     // dispatched. Narrow, and on this one member only.
     #[allow(
         clippy::unused_async,
-        clippy::unused_async_trait_impl,
         reason = "required by the interface dispatcher"
     )]
     async fn configure(
@@ -622,13 +621,13 @@ impl ConnectorService {
 
     // The registry is in memory: there is nothing to await. `async` is the
     // shape the interface macro dispatches, not a claim about the work.
-    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
+    #[allow(clippy::unused_async)]
     async fn list_capabilities(&self) -> TinyBusResult<ComposioCapabilitiesResponse> {
         Ok(self.registry.capabilities())
     }
 
     // Same: reads the registry.
-    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
+    #[allow(clippy::unused_async)]
     async fn list_agent_ready_toolkits(&self) -> TinyBusResult<ComposioAgentReadyToolkitsResponse> {
         Ok(ComposioAgentReadyToolkitsResponse {
             toolkits: self.registry.agent_ready_toolkits(),
