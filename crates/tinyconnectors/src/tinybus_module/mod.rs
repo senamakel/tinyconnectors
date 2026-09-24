@@ -412,11 +412,7 @@ impl ConnectorService {
     // `async` with nothing awaited: swapping a route is a lock and a move, but
     // every member of a `#[tinybus::interface]` impl has to be async to be
     // dispatched. Narrow, and on this one member only.
-    #[allow(
-        clippy::unused_async,
-        clippy::unused_async_trait_impl,
-        reason = "required by the interface dispatcher"
-    )]
+    #[allow(clippy::unused_async, reason = "required by the interface dispatcher")]
     async fn configure(
         &self,
         request: ComposioConfigureRequest,
@@ -622,13 +618,13 @@ impl ConnectorService {
 
     // The registry is in memory: there is nothing to await. `async` is the
     // shape the interface macro dispatches, not a claim about the work.
-    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
+    #[allow(clippy::unused_async)]
     async fn list_capabilities(&self) -> TinyBusResult<ComposioCapabilitiesResponse> {
         Ok(self.registry.capabilities())
     }
 
     // Same: reads the registry.
-    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
+    #[allow(clippy::unused_async)]
     async fn list_agent_ready_toolkits(&self) -> TinyBusResult<ComposioAgentReadyToolkitsResponse> {
         Ok(ComposioAgentReadyToolkitsResponse {
             toolkits: self.registry.agent_ready_toolkits(),

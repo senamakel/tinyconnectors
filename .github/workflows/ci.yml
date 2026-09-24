@@ -142,7 +142,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build with the declared MSRV
-        run: cargo build --all-targets --all-features
+        env:
+          MSRV: ${{ steps.msrv.outputs.version }}
+        run: cargo +"$MSRV" build --all-targets --all-features
 
   supply-chain:
     name: Supply chain
