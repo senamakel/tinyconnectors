@@ -93,6 +93,11 @@ pub enum ComposioConfigureRequest {
         base_url: String,
         /// Bearer token for the signed-in user.
         auth_token: String,
+        /// The user's IANA time zone, e.g. `Asia/Kolkata`, forwarded to the
+        /// backend so it can render upstream UTC timestamps in local time.
+        /// Absent means UTC, as before. Added in contract 1.9.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timezone: Option<String>,
     },
     /// Reach Composio directly with a user-supplied key.
     Direct {

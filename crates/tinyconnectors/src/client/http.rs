@@ -9,6 +9,18 @@ use crate::{Error, Result};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Header naming the user's IANA time zone, e.g. `Asia/Kolkata`.
+///
+/// Upstream results carry timestamps in UTC. The backend renders them for a
+/// model to read, and a model handed only `12:09:20Z` plus a local-time clock
+/// in its prompt reads the UTC digits as local time. With the zone the backend
+/// can print the local time beside the UTC value.
+pub(crate) const TIMEZONE_HEADER: &str = "x-timezone";
+
+/// Longest accepted zone name. The longest IANA name is well under this; a
+/// longer value is a misconfiguration, dropped rather than sent.
+const TIMEZONE_MAX_LEN: usize = 64;
+
 /// How a transport presents its credential.
 ///
 /// The two routes authenticate differently — the `TinyHumans` backend takes a
@@ -47,6 +59,8 @@ pub struct HttpTransport {
     base_url: String,
     credential: String,
     scheme: AuthScheme,
+    /// Sent as [`TIMEZONE_HEADER`] when set. See [`HttpTransport::with_timezone`].
+    timezone: Option<String>,
     agent: ureq::Agent,
 }
 
@@ -57,6 +71,7 @@ impl std::fmt::Debug for HttpTransport {
         f.debug_struct("HttpTransport")
             .field("base_url", &self.base_url)
             .field("scheme", &self.scheme)
+            .field("timezone", &self.timezone)
             .finish_non_exhaustive()
     }
 }
@@ -91,11 +106,31 @@ impl HttpTransport {
             base_url,
             credential,
             scheme,
+            timezone: None,
             agent: ureq::Agent::config_builder()
                 .timeout_global(Some(REQUEST_TIMEOUT))
                 .build()
                 .into(),
         })
+    }
+
+    /// Send the user's IANA time zone as [`TIMEZONE_HEADER`] on every request.
+    ///
+    /// Only IANA-shaped names are kept (`Area/Location`, letters, digits and
+    /// `/ _ + -`), so a value that crossed the bus cannot inject a header or
+    /// smuggle anything else. Anything else, or nothing, sends no header, and
+    /// the backend keeps rendering UTC as it always has.
+    #[must_use]
+    pub fn with_timezone(mut self, timezone: Option<&str>) -> Self {
+        self.timezone = timezone.map(str::trim).and_then(|zone| {
+            let valid = !zone.is_empty()
+                && zone.len() <= TIMEZONE_MAX_LEN
+                && zone
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '+' | '-'));
+            valid.then(|| zone.to_string())
+        });
+        self
     }
 
     fn url(&self, path: &str) -> String {
@@ -139,10 +174,13 @@ impl Transport for HttpTransport {
         let url = self.url(path);
         let agent = self.agent.clone();
         let (header, value) = self.auth_header();
+        let timezone = self.timezone.clone();
         self.call(path, move || {
-            agent
-                .get(&url)
-                .header(header, &value)
+            let mut request = agent.get(&url).header(header, &value);
+            if let Some(zone) = &timezone {
+                request = request.header(TIMEZONE_HEADER, zone);
+            }
+            request
                 .call()
                 .map_err(|error| error.to_string())?
                 .body_mut()
@@ -157,10 +195,13 @@ impl Transport for HttpTransport {
         let agent = self.agent.clone();
         let (header, value) = self.auth_header();
         let body = body.clone();
+        let timezone = self.timezone.clone();
         self.call(path, move || {
-            agent
-                .post(&url)
-                .header(header, &value)
+            let mut request = agent.post(&url).header(header, &value);
+            if let Some(zone) = &timezone {
+                request = request.header(TIMEZONE_HEADER, zone);
+            }
+            request
                 .send_json(&body)
                 .map_err(|error| error.to_string())?
                 .body_mut()
@@ -174,10 +215,13 @@ impl Transport for HttpTransport {
         let url = self.url(path);
         let agent = self.agent.clone();
         let (header, value) = self.auth_header();
+        let timezone = self.timezone.clone();
         self.call(path, move || {
-            agent
-                .delete(&url)
-                .header(header, &value)
+            let mut request = agent.delete(&url).header(header, &value);
+            if let Some(zone) = &timezone {
+                request = request.header(TIMEZONE_HEADER, zone);
+            }
+            request
                 .call()
                 .map_err(|error| error.to_string())?
                 .body_mut()
