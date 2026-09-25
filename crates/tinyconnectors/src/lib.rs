@@ -73,6 +73,10 @@ pub mod oauth;
 pub mod providers;
 pub mod state;
 mod tinybus_module;
+
+/// Constructs this module for registration with an in-process TinyBus host.
+#[cfg(feature = "linked")]
+pub use tinybus_module::linked_module;
 pub mod triggers;
 
 pub use error::{Error, Result};
