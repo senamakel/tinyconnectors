@@ -264,3 +264,65 @@ async fn a_refused_connection_is_a_transport_failure_naming_the_path() {
     assert!(matches!(error, Error::Transport { .. }));
     assert!(error.to_string().contains("/anything"));
 }
+
+#[tokio::test]
+async fn a_configured_time_zone_rides_every_request_as_a_header() {
+    let (base_url, requests) = loopback_server(r#"{"successful":true}"#);
+    let transport = HttpTransport::bearer(&base_url, "t0ken")
+        .unwrap()
+        .with_timezone(Some("Asia/Kolkata"));
+
+    transport
+        .post(
+            "/agent-integrations/composio/execute",
+            &serde_json::json!({ "tool": "GMAIL_FETCH_EMAILS" }),
+        )
+        .await
+        .unwrap();
+
+    let request = requests
+        .recv()
+        .expect("the server saw a request")
+        .to_lowercase();
+    assert!(request.contains("x-timezone: asia/kolkata"), "{request}");
+}
+
+#[tokio::test]
+async fn no_time_zone_sends_no_header() {
+    let (base_url, requests) = loopback_server(r#"{"toolkits":[]}"#);
+    let transport = HttpTransport::bearer(&base_url, "t0ken")
+        .unwrap()
+        .with_timezone(None);
+
+    transport
+        .get("/agent-integrations/composio/toolkits")
+        .await
+        .unwrap();
+
+    let request = requests
+        .recv()
+        .expect("the server saw a request")
+        .to_lowercase();
+    assert!(!request.contains("x-timezone"), "{request}");
+}
+
+#[test]
+fn only_iana_shaped_zones_are_kept() {
+    let kept = |zone: &str| {
+        HttpTransport::bearer("https://api.example.com", "t")
+            .unwrap()
+            .with_timezone(Some(zone))
+            .timezone
+    };
+    assert_eq!(
+        kept(" America/Argentina/Buenos_Aires ").as_deref(),
+        Some("America/Argentina/Buenos_Aires")
+    );
+    assert_eq!(kept("Etc/GMT+5").as_deref(), Some("Etc/GMT+5"));
+    assert_eq!(kept("UTC").as_deref(), Some("UTC"));
+    // Header injection, whitespace and junk are dropped, not sent.
+    assert_eq!(kept("Asia/Kolkata\r\nx-evil: 1"), None);
+    assert_eq!(kept("Asia Kolkata"), None);
+    assert_eq!(kept(""), None);
+    assert_eq!(kept(&"A".repeat(65)), None);
+}

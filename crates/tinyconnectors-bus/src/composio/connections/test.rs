@@ -99,12 +99,38 @@ fn a_proxy_configuration_is_tagged_exactly_like_the_load_time_blob() {
     let json = serde_json::to_value(ComposioConfigureRequest::Proxy {
         base_url: "https://api.example.com".to_string(),
         auth_token: "tok".to_string(),
+        timezone: None,
     })
     .expect("serialize");
 
     assert_eq!(json["route"], "proxy");
     assert_eq!(json["base_url"], "https://api.example.com");
     assert_eq!(json["auth_token"], "tok");
+    // Absent, not `null`: a host that sends no zone must look exactly like a
+    // pre-1.9 host on the wire.
+    assert!(json.get("timezone").is_none());
+}
+
+#[test]
+fn a_proxy_configuration_carries_the_time_zone_and_older_blobs_still_decode() {
+    let json = serde_json::to_value(ComposioConfigureRequest::Proxy {
+        base_url: "https://api.example.com".to_string(),
+        auth_token: "tok".to_string(),
+        timezone: Some("Asia/Kolkata".to_string()),
+    })
+    .expect("serialize");
+    assert_eq!(json["timezone"], "Asia/Kolkata");
+
+    // A 1.8 host sends no zone; it must still decode, with none.
+    let older = serde_json::json!({
+        "route": "proxy",
+        "base_url": "https://api.example.com",
+        "auth_token": "tok",
+    });
+    match serde_json::from_value(older).expect("decode a pre-1.9 blob") {
+        ComposioConfigureRequest::Proxy { timezone, .. } => assert!(timezone.is_none()),
+        other => panic!("decoded as the wrong route: {other:?}"),
+    }
 }
 
 #[test]

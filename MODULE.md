@@ -26,6 +26,11 @@ the billing margin, the toolkit allowlist, and the HMAC verification of inbound
 webhooks. **direct** goes straight to `backend.composio.dev/api/v3` with the
 user's own key.
 
+**proxy** also takes an optional `"timezone"` (an IANA name such as
+`"Asia/Kolkata"`, contract 1.9), sent to the backend as an `x-timezone` header
+so it can render upstream UTC timestamps in the user's local time. Without it
+the backend renders UTC. Only IANA-shaped names are forwarded.
+
 The module implements both routes and selects neither — which one to use depends
 on whether the user is signed in and whether they supplied a key, and those are
 the host's decisions. Change route by reloading the module with a different

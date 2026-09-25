@@ -1336,6 +1336,7 @@ async fn configure_refuses_a_base_url_that_would_leak_the_credential() {
         .configure(ComposioConfigureRequest::Proxy {
             base_url: "http://evil.example.com".to_string(),
             auth_token: "tok".to_string(),
+            timezone: None,
         })
         .await
         .expect_err("plain http to a public host must be refused");

@@ -96,6 +96,10 @@ pub(crate) enum RouteConfig {
         /// Never logged and never returned through a member — see
         /// `HttpTransport`'s hand-written `Debug`.
         auth_token: String,
+        /// The user's IANA time zone, sent to the backend as `x-timezone`.
+        /// Optional: without it the backend renders UTC, as it always has.
+        #[serde(default)]
+        timezone: Option<String>,
     },
     /// Reach Composio directly with a user-supplied key.
     Direct {
@@ -191,9 +195,11 @@ impl RouteConfig {
             ComposioConfigureRequest::Proxy {
                 base_url,
                 auth_token,
+                timezone,
             } => Some(Self::Proxy {
                 base_url,
                 auth_token,
+                timezone,
                 state_dir: None,
             }),
             ComposioConfigureRequest::Direct {
@@ -230,9 +236,13 @@ impl RouteConfig {
             Self::Proxy {
                 base_url,
                 auth_token,
+                timezone,
                 ..
             } => {
-                let transport = Arc::new(HttpTransport::bearer(&base_url, auth_token)?);
+                let transport = Arc::new(
+                    HttpTransport::bearer(&base_url, auth_token)?
+                        .with_timezone(timezone.as_deref()),
+                );
                 Ok(Arc::new(ProxyRoute::new(transport)))
             }
             Self::Direct {
