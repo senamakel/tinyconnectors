@@ -50,6 +50,11 @@ jobs:
       - name: Test
         run: cargo test --all-features
 
+      # The all-features build leaves a static-link cdylib at the normal artifact
+      # path. Rebuild the default dynamic artifact before the loader E2E test.
+      - name: Build dynamic module
+        run: cargo build -p tinyconnectors
+
       - name: Test default features
         run: cargo test
 
