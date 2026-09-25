@@ -8,7 +8,7 @@
 //!
 //! # Where the credential comes from
 //!
-//! The host supplies [`ModuleConfig`] as the module's JSON configuration blob
+//! The host supplies `ModuleConfig` as the module's JSON configuration blob
 //! at load time. That is deliberately the only way in: the module does not read
 //! the environment and does not authenticate a user itself.
 //!
