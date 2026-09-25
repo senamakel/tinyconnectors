@@ -72,10 +72,12 @@ pub mod execute;
 pub mod oauth;
 pub mod providers;
 pub mod state;
+#[cfg(not(feature = "static-link"))]
 mod tinybus_module;
-
+#[cfg(feature = "static-link")]
+pub mod tinybus_module;
 /// Constructs this module for registration with an in-process TinyBus host.
-#[cfg(feature = "linked")]
+#[cfg(feature = "static-link")]
 pub use tinybus_module::linked_module;
 pub mod triggers;
 
