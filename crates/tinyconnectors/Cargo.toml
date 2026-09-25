@@ -67,6 +67,8 @@ tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 default = []
+# Link the TinyBus module into a host binary with Rust-addressable entry points.
+static-link = []
 
 [lints]
 workspace = true

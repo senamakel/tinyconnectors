@@ -59,7 +59,7 @@ pub struct HttpTransport {
     base_url: String,
     credential: String,
     scheme: AuthScheme,
-    /// Sent as [`TIMEZONE_HEADER`] when set. See [`HttpTransport::with_timezone`].
+    /// Sent as `TIMEZONE_HEADER` when set. See [`HttpTransport::with_timezone`].
     timezone: Option<String>,
     agent: ureq::Agent,
 }
@@ -114,7 +114,7 @@ impl HttpTransport {
         })
     }
 
-    /// Send the user's IANA time zone as [`TIMEZONE_HEADER`] on every request.
+    /// Send the user's IANA time zone as `TIMEZONE_HEADER` on every request.
     ///
     /// Only IANA-shaped names are kept (`Area/Location`, letters, digits and
     /// `/ _ + -`), so a value that crossed the bus cannot inject a header or
