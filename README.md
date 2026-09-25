@@ -117,3 +117,12 @@ cargo run -p tinyconnectors --example verify_module -- target/debug/libtinyconne
 ## License
 
 GPL-3.0-only. See [`LICENSE`](LICENSE).
+
+## Static linking
+
+Enable the `static-link` feature when compiling this module into a Rust host. It
+exposes `tinybus_module::TINYBUS_MODULE_ABI_V1`,
+`tinybus_module::tinybus_module_manifest_v1`, and
+`tinybus_module::tinybus_module_init_v1` as Rust-addressable entries for the
+TinyBus linked-module loader. The default build retains the native loadable
+module exports. Build without `static-link` when packaging a `cdylib`.

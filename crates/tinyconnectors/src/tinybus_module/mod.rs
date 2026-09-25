@@ -882,7 +882,28 @@ async fn setup(connection: Connection, config: ModuleConfig) -> TinyBusResult<()
     Ok(())
 }
 
-tinybus_module::module_export! {
+macro_rules! export_module {
+    ($($declaration:tt)*) => {
+        #[cfg(feature = "static-link")]
+        mod linked_exports {
+            // TinyBus generates these three ABI items without rustdoc.
+            #![expect(missing_docs, reason = "generated TinyBus ABI entries")]
+            use super::*;
+            tinybus_module::module_export_static! { $($declaration)* }
+        }
+        #[cfg(feature = "static-link")]
+        pub use linked_exports::{
+            TINYBUS_MODULE_ABI_V1, tinybus_module_init_v1, tinybus_module_manifest_v1,
+        };
+        #[cfg(not(feature = "static-link"))]
+        mod dynamic_exports {
+            use super::*;
+            tinybus_module::module_export! { $($declaration)* }
+        }
+    };
+}
+
+export_module! {
     setup = setup,
     config = ModuleConfig,
     worker_threads = 1,
