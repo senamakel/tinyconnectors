@@ -737,7 +737,16 @@ impl ConnectorService {
                 request.trigger_config,
             )
             .await
-            .map_err(|error| to_bus_error(&error))
+            // Enabling is the one trigger call a user drives from a settings
+            // screen, so a failure is classified like an execute failure
+            // (`[composio:error:<class>]`): "reconnect GitHub" reads better
+            // than the provider's own wording.
+            .map_err(|error| {
+                tinybus::Error::failed(crate::execute::format_provider_error(
+                    &request.slug,
+                    &error.to_string(),
+                ))
+            })
     }
 
     async fn disable_trigger(
