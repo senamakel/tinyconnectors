@@ -26,8 +26,12 @@ tinyconnectors-bus = { workspace = true }
 # The provider registry, which answers the capability and profile members: what
 # this build knows how to do for a toolkit is a property of its providers.
 tinyconnectors-sync = { workspace = true }
-tinybus = { workspace = true }
-tinybus-module = { workspace = true }
+# The TinyBus module adapter, behind the default `module` feature. A host that
+# only wants the library — failure classification, argument preparation, the
+# trigger archive — turns default features off and compiles none of TinyBus,
+# which also keeps a second copy of the `tinybus` crate out of its build graph.
+tinybus = { workspace = true, optional = true }
+tinybus-module = { workspace = true, optional = true }
 thiserror = { workspace = true }
 # `Transport` is an object-safe trait with `async fn` methods, which native
 # `async fn in trait` cannot express behind `dyn`.
@@ -66,9 +70,13 @@ async-trait = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 
 [features]
-default = []
+# The module build the release workflow ships. Library-only consumers use
+# `default-features = false`.
+default = ["module"]
+# The TinyBus module adapter and its ABI exports (`src/tinybus_module/`).
+module = ["dep:tinybus", "dep:tinybus-module"]
 # Link the TinyBus module into a host binary with Rust-addressable entry points.
-static-link = []
+static-link = ["module"]
 
 [lints]
 workspace = true

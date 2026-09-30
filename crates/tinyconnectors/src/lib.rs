@@ -72,7 +72,7 @@ pub mod execute;
 pub mod oauth;
 pub mod providers;
 pub mod state;
-#[cfg(not(feature = "static-link"))]
+#[cfg(all(feature = "module", not(feature = "static-link")))]
 mod tinybus_module;
 #[cfg(feature = "static-link")]
 pub mod tinybus_module;
