@@ -288,3 +288,7 @@ fn is_embedded_provider_failure(lower: &str) -> bool {
         .iter()
         .any(|needle| lower.contains(needle))
 }
+
+#[cfg(test)]
+#[path = "classify_test.rs"]
+mod test;
