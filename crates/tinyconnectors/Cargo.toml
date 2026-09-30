@@ -69,6 +69,15 @@ async-trait = { workspace = true }
 # for over a minute in production costs them nothing.
 tokio = { workspace = true, features = ["test-util"] }
 
+# The bundled examples drive the loaded module through TinyBus.
+[[example]]
+name = "verify_module"
+required-features = ["module"]
+
+[[example]]
+name = "verify_github_release"
+required-features = ["module"]
+
 [features]
 # The module build the release workflow ships. Library-only consumers use
 # `default-features = false`.
