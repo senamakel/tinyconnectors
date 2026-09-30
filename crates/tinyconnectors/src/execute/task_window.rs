@@ -38,7 +38,7 @@ use crate::ComposioExecuteResponse;
 enum TsFormat {
     /// RFC3339 / ISO-8601 string, e.g. `2026-06-21T10:00:00.000Z`.
     Iso8601,
-    /// Unix epoch **milliseconds**, as a JSON string or number (ClickUp).
+    /// Unix epoch **milliseconds**, as a JSON string or number (`ClickUp`).
     EpochMillis,
 }
 
@@ -286,12 +286,12 @@ pub fn filter_response(
 fn keep_item(item: &Value, ts_fields: &[(&str, TsFormat)], floor: DateTime<Utc>) -> bool {
     let mut saw_timestamp = false;
     for (field, fmt) in ts_fields {
-        if let Some(raw) = field_at(item, field) {
-            if let Some(ts) = parse_ts(raw, *fmt) {
-                saw_timestamp = true;
-                if ts >= floor {
-                    return true;
-                }
+        if let Some(raw) = field_at(item, field)
+            && let Some(ts) = parse_ts(raw, *fmt)
+        {
+            saw_timestamp = true;
+            if ts >= floor {
+                return true;
             }
         }
     }
