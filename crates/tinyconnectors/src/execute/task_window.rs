@@ -7,8 +7,8 @@
 //! is in force and how long it is; this module only applies the `since` instant
 //! it is handed, around the execute call.
 //!
-//! Two layers, both gated on the task-local window being present AND the slug
-//! appearing in [`spec_for`]:
+//! Two layers, both gated on a window being in force AND the slug being one of
+//! the verified task-fetch slugs:
 //!
 //! 1. **Best-effort server-side narrowing** ([`apply_window_args`]): inject an
 //!    ordering / `*_since` argument the provider understands, when the caller
@@ -347,3 +347,6 @@ fn array_at_mut<'a>(root: &'a mut Value, path: &[&str]) -> Option<&'a mut Vec<Va
     cur.as_array_mut()
 }
 
+#[cfg(test)]
+#[path = "task_window_test.rs"]
+mod test;

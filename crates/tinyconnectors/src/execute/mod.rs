@@ -36,6 +36,15 @@
 //! record as issuing up to four calls per logical retry. Here the policy lives
 //! in exactly one place.
 //!
+//! # Optional argument and response shaping
+//!
+//! Two helpers are not part of [`execute_action`] and a host applies them
+//! around the call when it wants them: [`apply_calendar_query_defaults`]
+//! (a `timeZone` and `singleEvents` default for calendar list actions, given
+//! the zone by the host) and [`apply_window_args`] / [`filter_response`]
+//! (a recency window for task-fetch actions, given the `since` instant by the
+//! host).
+//!
 //! # What is deliberately not here
 //!
 //! **Egress enforcement.** `OpenHuman` refuses outbound tool calls under its
@@ -44,15 +53,19 @@
 //! calling this member — a module that enforced it would be trusting a
 //! policy decision it cannot see the reasons for.
 
+mod calendar;
 mod classify;
 mod prepare;
 mod retry;
+mod task_window;
 
+pub use calendar::{TZ_DEFAULTING_SLUGS, apply_calendar_query_defaults};
 pub use classify::{ComposioErrorClass, classify_composio_error, format_provider_error};
 pub use prepare::prepare_execute_arguments;
 pub use retry::{
     POST_OAUTH_RETRY_DELAY, RATE_LIMIT_MAX_ATTEMPTS, RATE_LIMIT_RETRY_TOOLS, execute_action,
 };
+pub use task_window::{apply_window_args, filter_response};
 
 #[cfg(test)]
 mod test;
