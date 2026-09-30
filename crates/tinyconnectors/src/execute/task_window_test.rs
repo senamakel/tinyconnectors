@@ -1,11 +1,11 @@
-//! Tests for the task-recency window narrowing + post-filter.
+//! Tests for the task-recency window narrowing and post-filter.
+
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use serde_json::{Value, json};
 use chrono::{DateTime, TimeZone, Utc};
 use crate::ComposioExecuteResponse;
 use super::{apply_window_args, filter_response};
-use chrono::TimeZone;
-use serde_json::json;
 
 fn floor() -> DateTime<Utc> {
     // Fixed "now - 24h" floor for deterministic comparisons.

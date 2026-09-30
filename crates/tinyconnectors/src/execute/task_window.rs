@@ -3,10 +3,9 @@
 //! Background: the `morning_briefing` agent fetches the user's open tasks via
 //! `composio_execute` against whichever task manager they connected. Left
 //! unbounded those calls return the *entire* backlog; the brief only wants
-//! what was created/changed in the last 24h. The cron runner installs a
-//! [`crate::agent::harness::current_task_recency_window`] for the
-//! brief turn, and this module applies it inside the `composio_execute`
-//! handler.
+//! what was created/changed in the last 24h. The host decides whether a window
+//! is in force and how long it is; this module only applies the `since` instant
+//! it is handed, around the execute call.
 //!
 //! Two layers, both gated on the task-local window being present AND the slug
 //! appearing in [`spec_for`]:
@@ -17,8 +16,7 @@
 //!    payload size / improves ordering — correctness never depends on it.
 //! 2. **Authoritative client-side post-filter** ([`filter_response`]): drop
 //!    rows whose timestamp predates `now - window`. This is the enforcement.
-//!    Mirrors the proven `sync_depth_days` floor in the native sync providers
-//!    (e.g. `memory_sync::composio::providers::linear::provider`).
+//!    Mirrors the `sync_depth_days` floor in the native sync providers.
 //!
 //! Scope is intentionally narrow: only slugs with a *verified* response shape
 //! are listed. An unknown slug degrades to "no filtering" — never a crash and never a
@@ -63,12 +61,11 @@ struct TaskWindowSpec {
 /// confirmed (repo-proven or docs-verified). See module docs.
 fn spec_for(slug: &str) -> Option<TaskWindowSpec> {
     match slug {
-        // Linear — repo-proven request (`orderBy:"updatedAt"`) and response
-        // shape. Linear returns GraphQL connections (`{issues:{nodes:[...]}}`)
-        // that Composio may re-wrap under `data` / `data.data`; the items and
-        // timestamp paths mirror `providers::linear::sync::{extract_issues,
-        // extract_issue_updated}` so we catch every nesting (else we'd hit the
-        // no-array pass-through and leave the backlog unfiltered).
+        // Linear — proven request (`orderBy:"updatedAt"`) and response shape.
+        // Linear returns GraphQL connections (`{issues:{nodes:[...]}}`) that
+        // Composio may re-wrap under `data` / `data.data`; the items and
+        // timestamp paths cover every nesting (else we'd hit the no-array
+        // pass-through and leave the backlog unfiltered).
         "LINEAR_LIST_LINEAR_ISSUES" | "LINEAR_SEARCH_ISSUES" => Some(TaskWindowSpec {
             items_paths: &[
                 &["data", "issues", "nodes"],
@@ -89,11 +86,9 @@ fn spec_for(slug: &str) -> Option<TaskWindowSpec> {
             ],
             order_arg: Some(("orderBy", "updatedAt")),
         }),
-        // ClickUp — repo-proven request (`order_by:"updated"`) and response
-        // shape, mirroring `providers::clickup::sync::{extract_tasks,
-        // extract_task_updated}` (envelope `data.tasks` / `tasks` /
-        // `data.data.tasks`; timestamp `date_updated` epoch-ms, possibly
-        // wrapped or camelCased by Composio).
+        // ClickUp — proven request (`order_by:"updated"`) and response shape
+        // (envelope `data.tasks` / `tasks` / `data.data.tasks`; timestamp
+        // `date_updated` epoch-ms, possibly wrapped or camelCased by Composio).
         "CLICKUP_GET_FILTERED_TEAM_TASKS" | "CLICKUP_GET_TASKS" => Some(TaskWindowSpec {
             items_paths: &[
                 &["data", "tasks"],
@@ -152,7 +147,7 @@ fn spec_for(slug: &str) -> Option<TaskWindowSpec> {
         // created-or-modified semantics. `created_at` is kept as a harmless
         // defensive fallback (extra fields only ever keep, never drop).
         // CONFIRM-AT-RUNTIME: response envelope via composio_list_tools (Todoist
-        // is not a native sync provider, so there's no repo extractor to mirror).
+        // is not a native sync provider, so there's no extractor to mirror).
         "TODOIST_GET_ALL_TASKS" => Some(TaskWindowSpec {
             items_paths: &[
                 &["tasks"],
@@ -179,6 +174,7 @@ fn spec_for(slug: &str) -> Option<TaskWindowSpec> {
 /// Inject best-effort server-side narrowing args for a task-fetch slug, when
 /// the task-recency window is active. Caller-supplied keys are never
 /// overwritten. Unknown slugs pass through untouched.
+#[must_use]
 pub fn apply_window_args(
     slug: &str,
     arguments: Option<Value>,
@@ -188,7 +184,7 @@ pub fn apply_window_args(
         return arguments;
     };
 
-    let mut value = arguments.unwrap_or_else(|| Value::Object(Default::default()));
+    let mut value = arguments.unwrap_or_else(|| Value::Object(serde_json::Map::default()));
     let Some(map) = value.as_object_mut() else {
         // Non-object payload (unexpected) — leave it for the backend to reject.
         return Some(value);
@@ -224,6 +220,7 @@ pub fn apply_window_args(
 /// array can't be located, or nothing was actually removed. When rows *are*
 /// removed, `markdown_formatted` is cleared so the agent consumes the filtered
 /// `data` rather than stale server-rendered markdown.
+#[must_use]
 pub fn filter_response(
     slug: &str,
     mut resp: ComposioExecuteResponse,
@@ -249,8 +246,9 @@ pub fn filter_response(
         return resp;
     };
 
-    // Safe: `find` above guaranteed this path resolves to an array.
-    let items = array_at(&resp.data, path).expect("path resolved above");
+    let Some(items) = array_at(&resp.data, path) else {
+        return resp;
+    };
     let total = items.len();
     let kept: Vec<Value> = items
         .iter()
@@ -284,8 +282,7 @@ pub fn filter_response(
 /// no parseable timestamp field is kept (never dropped on ambiguity).
 ///
 /// Field names may be dotted (`data.updatedAt`) to reach Composio-wrapped rows
-/// — mirrors `providers::pick_str`, which the native sync extractors use for
-/// exactly these `data.`-nested envelopes.
+/// for exactly these `data.`-nested envelopes.
 fn keep_item(item: &Value, ts_fields: &[(&str, TsFormat)], floor: DateTime<Utc>) -> bool {
     let mut saw_timestamp = false;
     for (field, fmt) in ts_fields {
