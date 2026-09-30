@@ -218,8 +218,12 @@ impl Route for DirectRoute {
     }
 
     async fn list_connections(&self) -> Result<ComposioConnectionsResponse> {
-        tracing::debug!("[connectors][direct] GET /connected_accounts");
-        let value = self.call(self.transport.get("/connected_accounts")).await?;
+        // Composio paginates. Ask for a generous page so an ordinary tenant sees
+        // its whole list in one round trip; without `limit` v3 returns its small
+        // default page and connections beyond it look disconnected.
+        let path = "/connected_accounts?limit=200";
+        tracing::debug!("[connectors][direct] GET {path}");
+        let value = self.call(self.transport.get(path)).await?;
 
         // v3 has returned both a bare array and `{ items: [...] }`.
         let items = value
@@ -270,18 +274,26 @@ impl Route for DirectRoute {
         toolkits: &[String],
         tags: &[String],
     ) -> Result<ComposioToolsResponse> {
-        let mut query: Vec<String> = Vec::new();
+        // `toolkit_versions=latest`: without it v3 answers from its
+        // `00000000_00` snapshot, which lists no tools at all for a toolkit
+        // published after it. `limit` keeps a large toolkit on one page.
+        let mut query: Vec<String> = vec![
+            "limit=200".to_string(),
+            "toolkit_versions=latest".to_string(),
+        ];
         if let Some(joined) = comma_joined(toolkits) {
             query.push(format!("toolkits={joined}"));
         }
-        if let Some(joined) = comma_joined(tags) {
-            query.push(format!("tags={joined}"));
+        // v3 documents a repeated `tags` parameter ("can be specified multiple
+        // times"), not the comma-joined form the proxy backend takes.
+        for tag in tags
+            .iter()
+            .map(|tag| tag.trim())
+            .filter(|tag| !tag.is_empty())
+        {
+            query.push(format!("tags={}", encode(tag)));
         }
-        let path = if query.is_empty() {
-            "/tools".to_string()
-        } else {
-            format!("/tools?{}", query.join("&"))
-        };
+        let path = format!("/tools?{}", query.join("&"));
 
         tracing::debug!(path = %path, "[connectors][direct] list_tools");
         let value = self.call(self.transport.get(&path)).await?;
