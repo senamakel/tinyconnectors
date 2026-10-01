@@ -48,6 +48,18 @@
 //! surface and `tinyconnectors::ComposioConnection` is the *same type* as
 //! `tinyconnectors_bus::ComposioConnection`, not a structural twin.
 //!
+//! # Features
+//!
+//! - `module` (default) compiles the `TinyBus` adapter and the module ABI
+//!   exports. The release workflow ships this build.
+//! - `static-link` (implies `module`) exposes those exports as Rust items for a
+//!   host that links the module in.
+//!
+//! A host that wants only the library — failure classification, argument
+//! preparation, the trigger archive, the calendar and task-window helpers —
+//! depends on this crate with `default-features = false` and compiles no
+//! `TinyBus` at all.
+//!
 //! # Example
 //!
 //! ```
@@ -72,7 +84,7 @@ pub mod execute;
 pub mod oauth;
 pub mod providers;
 pub mod state;
-#[cfg(not(feature = "static-link"))]
+#[cfg(all(feature = "module", not(feature = "static-link")))]
 mod tinybus_module;
 #[cfg(feature = "static-link")]
 pub mod tinybus_module;

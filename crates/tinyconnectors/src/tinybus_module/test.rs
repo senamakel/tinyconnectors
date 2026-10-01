@@ -1159,7 +1159,7 @@ async fn setup_on_the_direct_route_serves_too() -> tinybus::Result<()> {
     let reply: ComposioAgentReadyToolkitsResponse = proxy
         .call(names::methods::LIST_AGENT_READY_TOOLKITS, ())
         .await?;
-    assert!(!reply.toolkits.is_empty());
+    assert_ne!(reply.toolkits.len(), 0);
     Ok(())
 }
 
@@ -1295,6 +1295,7 @@ async fn a_module_loaded_without_a_route_becomes_usable_after_configure() {
             api_key: "sk-live".to_string(),
             entity_id: None,
             base_url: None,
+            transport: None,
         })
         .await
         .expect("a direct route is installable");
@@ -1319,6 +1320,7 @@ async fn configure_replaces_a_route_that_is_already_installed() {
             api_key: "sk-live".to_string(),
             entity_id: Some("ent_9".to_string()),
             base_url: None,
+            transport: None,
         })
         .await
         .expect("replacing a route is allowed");
@@ -1337,6 +1339,7 @@ async fn configure_refuses_a_base_url_that_would_leak_the_credential() {
             base_url: "http://evil.example.com".to_string(),
             auth_token: "tok".to_string(),
             timezone: None,
+            transport: None,
         })
         .await
         .expect_err("plain http to a public host must be refused");
@@ -1374,6 +1377,7 @@ async fn a_reconfigured_route_reaches_the_action_runner_too() {
             api_key: "sk-live".to_string(),
             entity_id: None,
             base_url: None,
+            transport: None,
         })
         .await
         .expect("install a route");
@@ -1423,6 +1427,27 @@ async fn a_failed_execute_carries_an_error_class() {
             tool: "GMAIL_FETCH_EMAILS".to_string(),
             arguments: None,
             connection_id: None,
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("[composio:error:"), "{error}");
+    assert!(error.contains("rate limited"), "{error}");
+}
+
+#[tokio::test]
+async fn a_failed_enable_trigger_carries_an_error_class() {
+    // Enabling is driven from a settings screen; the class prefix is what lets
+    // the host say "reconnect" instead of echoing the provider's wording.
+    let transport = StubTransport::failing("rate limited");
+    let service = service_over(transport);
+
+    let error = service
+        .enable_trigger(ComposioEnableTriggerRequest {
+            connection_id: "c1".to_string(),
+            slug: "GITHUB_COMMIT_EVENT".to_string(),
+            trigger_config: None,
         })
         .await
         .unwrap_err()
