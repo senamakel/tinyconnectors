@@ -178,6 +178,31 @@ fn field(item: &serde_json::Value, keys: &[&str]) -> Option<String> {
     None
 }
 
+/// Read a slug, skipping blank strings so a later key can still supply it.
+///
+/// Like [`field`], but trimmed, and an empty or whitespace-only value counts as
+/// absent. v3 has sent `"toolkit": ""` beside a usable `appName`.
+fn slug_field(item: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| match item.get(*key) {
+        Some(serde_json::Value::String(value)) => {
+            let value = value.trim();
+            (!value.is_empty()).then(|| value.to_string())
+        }
+        Some(serde_json::Value::Object(nested)) => {
+            ["slug", "id", "name", "key"]
+                .iter()
+                .find_map(|inner| match nested.get(*inner) {
+                    Some(serde_json::Value::String(value)) => {
+                        let value = value.trim();
+                        (!value.is_empty()).then(|| value.to_string())
+                    }
+                    _ => None,
+                })
+        }
+        _ => None,
+    })
+}
+
 /// Translate one v3 `connected_accounts` item into a [`ComposioConnection`].
 ///
 /// Defensive on every field: a row missing its toolkit or status is kept with
@@ -185,11 +210,27 @@ fn field(item: &serde_json::Value, keys: &[&str]) -> Option<String> {
 /// inactive. A malformed row therefore shows up as not-connected — which is the
 /// fail-safe direction — instead of disappearing and looking deleted.
 fn connection_from_v3(item: &serde_json::Value) -> Option<ComposioConnection> {
-    let id = field(item, &["id", "nanoid", "connectedAccountId"])?;
+    // A blank id is no id: an empty connection id sent on to v3 makes an invalid
+    // call, so the row is dropped, and a padded one is trimmed.
+    let id = field(item, &["id", "nanoid", "connectedAccountId"])?
+        .trim()
+        .to_string();
+    if id.is_empty() {
+        return None;
+    }
     Some(ComposioConnection {
         id,
-        toolkit: field(item, &["toolkit", "appName", "toolkit_slug", "appUniqueId"])
-            .unwrap_or_default(),
+        toolkit: slug_field(
+            item,
+            &[
+                "toolkit",
+                "appName",
+                "app_name",
+                "toolkit_slug",
+                "appUniqueId",
+            ],
+        )
+        .unwrap_or_default(),
         status: field(item, &["status", "connectionStatus"]).unwrap_or_default(),
         created_at: field(item, &["createdAt", "created_at"]),
         account_email: field(item, &["accountEmail", "email"]),
@@ -218,8 +259,12 @@ impl Route for DirectRoute {
     }
 
     async fn list_connections(&self) -> Result<ComposioConnectionsResponse> {
-        tracing::debug!("[connectors][direct] GET /connected_accounts");
-        let value = self.call(self.transport.get("/connected_accounts")).await?;
+        // Composio paginates. Ask for a generous page so an ordinary tenant sees
+        // its whole list in one round trip; without `limit` v3 returns its small
+        // default page and connections beyond it look disconnected.
+        let path = "/connected_accounts?limit=200";
+        tracing::debug!("[connectors][direct] GET {path}");
+        let value = self.call(self.transport.get(path)).await?;
 
         // v3 has returned both a bare array and `{ items: [...] }`.
         let items = value
@@ -270,18 +315,26 @@ impl Route for DirectRoute {
         toolkits: &[String],
         tags: &[String],
     ) -> Result<ComposioToolsResponse> {
-        let mut query: Vec<String> = Vec::new();
+        // `toolkit_versions=latest`: without it v3 answers from its
+        // `00000000_00` snapshot, which lists no tools at all for a toolkit
+        // published after it. `limit` keeps a large toolkit on one page.
+        let mut query: Vec<String> = vec![
+            "limit=200".to_string(),
+            "toolkit_versions=latest".to_string(),
+        ];
         if let Some(joined) = comma_joined(toolkits) {
             query.push(format!("toolkits={joined}"));
         }
-        if let Some(joined) = comma_joined(tags) {
-            query.push(format!("tags={joined}"));
+        // v3 documents a repeated `tags` parameter ("can be specified multiple
+        // times"), not the comma-joined form the proxy backend takes.
+        for tag in tags
+            .iter()
+            .map(|tag| tag.trim())
+            .filter(|tag| !tag.is_empty())
+        {
+            query.push(format!("tags={}", encode(tag)));
         }
-        let path = if query.is_empty() {
-            "/tools".to_string()
-        } else {
-            format!("/tools?{}", query.join("&"))
-        };
+        let path = format!("/tools?{}", query.join("&"));
 
         tracing::debug!(path = %path, "[connectors][direct] list_tools");
         let value = self.call(self.transport.get(&path)).await?;
@@ -392,11 +445,17 @@ fn tool_schemas_from_v3(value: &serde_json::Value) -> Vec<crate::ComposioToolSch
             // A v3 row is the function itself, not the `{type, function}`
             // envelope a model expects, so it is wrapped here.
             let name = field(row, &["slug", "name"])?;
+            // A row with a blank slug cannot be called, and offering it to a
+            // model as a function with no name is worse than not listing it.
+            if name.is_empty() {
+                return None;
+            }
             Some(crate::ComposioToolSchema {
                 kind: "function".to_string(),
                 function: crate::ComposioToolFunction {
                     name,
-                    description: field(row, &["description"]),
+                    // v3 rows without a description are described by their name.
+                    description: field(row, &["description", "name"]),
                     parameters: row
                         .get("input_parameters")
                         .or_else(|| row.get("parameters"))

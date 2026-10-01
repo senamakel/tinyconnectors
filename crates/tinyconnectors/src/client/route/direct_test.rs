@@ -22,6 +22,7 @@ struct FakeTransport {
     fail: Mutex<Option<String>>,
     calls: Mutex<u32>,
     last_body: Mutex<Option<serde_json::Value>>,
+    last_path: Mutex<Option<String>>,
 }
 
 impl FakeTransport {
@@ -41,6 +42,7 @@ impl FakeTransport {
 
     fn answer(&self, path: &str) -> Result<serde_json::Value> {
         *self.calls.lock().unwrap() += 1;
+        *self.last_path.lock().unwrap() = Some(path.to_string());
         if let Some(message) = self.fail.lock().unwrap().clone() {
             return Err(Error::Transport {
                 path: path.to_string(),
@@ -48,6 +50,10 @@ impl FakeTransport {
             });
         }
         Ok(self.reply.lock().unwrap().clone())
+    }
+
+    fn last_path(&self) -> String {
+        self.last_path.lock().unwrap().clone().unwrap()
     }
 
     fn calls(&self) -> u32 {
@@ -420,4 +426,80 @@ async fn a_successful_call_clears_the_gate_for_later_calls() {
     assert!(direct.list_connections().await.is_ok());
     assert!(direct.list_connections().await.is_ok());
     assert_eq!(transport.calls(), 2, "no gate ever closed");
+}
+
+#[tokio::test]
+async fn connected_accounts_ask_for_a_generous_page() {
+    let transport = FakeTransport::replying(json!({ "items": [] }));
+    route(transport.clone()).list_connections().await.unwrap();
+    assert_eq!(transport.last_path(), "/connected_accounts?limit=200");
+}
+
+#[tokio::test]
+async fn tool_listing_pins_latest_toolkit_versions_and_repeats_tags() {
+    let transport = FakeTransport::replying(json!({ "items": [] }));
+    route(transport.clone())
+        .list_tools(
+            &["gmail".to_string(), " github ".to_string()],
+            &["stars".to_string(), " ".to_string(), "repos".to_string()],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        transport.last_path(),
+        "/tools?limit=200&toolkit_versions=latest&toolkits=gmail,github&tags=stars&tags=repos"
+    );
+}
+
+#[tokio::test]
+async fn tool_listing_without_filters_still_pins_versions() {
+    let transport = FakeTransport::replying(json!({ "items": [] }));
+    route(transport.clone()).list_tools(&[], &[]).await.unwrap();
+    assert_eq!(
+        transport.last_path(),
+        "/tools?limit=200&toolkit_versions=latest"
+    );
+}
+
+#[tokio::test]
+async fn drops_a_blank_id_and_trims_a_padded_one() {
+    let transport = FakeTransport::replying(json!({
+        "items": [
+            { "id": "   ", "toolkit": "gmail", "status": "ACTIVE" },
+            { "id": "", "toolkit": "gmail", "status": "ACTIVE" },
+            { "id": "  ca_2 ", "toolkit": "slack", "status": "ACTIVE" }
+        ]
+    }));
+    let resp = route(transport).list_connections().await.unwrap();
+    assert_eq!(resp.connections.len(), 1);
+    assert_eq!(resp.connections[0].id, "ca_2");
+}
+
+#[tokio::test]
+async fn a_blank_toolkit_falls_back_to_the_app_name() {
+    let transport = FakeTransport::replying(json!({
+        "items": [
+            { "id": "a", "toolkit": " ", "app_name": " github ", "status": "ACTIVE" },
+            { "id": "b", "toolkit": { "slug": "", "name": "notion" }, "status": "ACTIVE" }
+        ]
+    }));
+    let resp = route(transport).list_connections().await.unwrap();
+    assert_eq!(resp.connections[0].toolkit, "github");
+    assert_eq!(resp.connections[1].toolkit, "notion");
+}
+
+#[tokio::test]
+async fn a_tool_without_a_description_is_described_by_its_name() {
+    let transport = FakeTransport::replying(json!({
+        "items": [
+            { "slug": "A_TOOL", "name": "A tool" },
+            { "slug": "", "description": "blank slug" }
+        ]
+    }));
+    let tools = route(transport).list_tools(&[], &[]).await.unwrap();
+    assert_eq!(tools.tools.len(), 1);
+    assert_eq!(
+        tools.tools[0].function.description.as_deref(),
+        Some("A tool")
+    );
 }
