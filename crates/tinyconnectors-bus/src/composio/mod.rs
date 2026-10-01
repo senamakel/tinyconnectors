@@ -12,6 +12,8 @@
 //!
 //! - [`toolkits`] — the connectable catalog and this build's capability matrix.
 //! - [`connections`] — connected accounts, the OAuth authorize handoff, delete.
+//! - [`direct`] — stateless direct reads that carry their own credential, and the
+//!   network (proxy/TLS) settings a host hands the module.
 //! - [`tools`] — function-calling schemas for a toolkit's actions.
 //! - [`execute`] — the result of running one action.
 //! - [`triggers`] — the trigger catalog, active subscriptions, and the webhook
@@ -32,6 +34,7 @@
 //! would be a lie the moment a second backend disagreed about a field.
 
 pub mod connections;
+pub mod direct;
 pub mod execute;
 pub mod github;
 pub mod toolkits;
@@ -45,6 +48,10 @@ pub use connections::{
     ComposioConfigureResponse, ComposioConnection, ComposioConnectionsResponse,
     ComposioDeleteConnectionRequest, ComposioDeleteResponse, ComposioIdentityFailure,
     ComposioRefreshIdentitiesResponse, ComposioUserProfile, ComposioUserProfileRequest,
+};
+pub use direct::{
+    ComposioDirectConnectionsRequest, ComposioDirectCredential, ComposioDirectToolsRequest,
+    ComposioTlsRoots, ComposioTransportConfig,
 };
 pub use execute::{ComposioExecuteRequest, ComposioExecuteResponse};
 pub use github::{ComposioGithubRepo, ComposioGithubReposResponse, ComposioListGithubReposRequest};
