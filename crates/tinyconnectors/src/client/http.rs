@@ -4,6 +4,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
+use tinyconnectors_bus::ComposioTransportConfig;
+
+use super::network::{Strictness, build_agent};
 use super::transport::Transport;
 use crate::{Error, Result};
 
@@ -38,6 +41,17 @@ impl AuthScheme {
         match self {
             Self::Bearer => "authorization",
             Self::ApiKey => "x-api-key",
+        }
+    }
+
+    /// How strictly the transport treats a response. A credential sent as
+    /// `x-api-key` must never follow a redirect, and its failures carry the
+    /// provider's own message; the backend bearer keeps the established
+    /// behaviour.
+    fn strictness(self) -> Strictness {
+        match self {
+            Self::Bearer => Strictness::Backend,
+            Self::ApiKey => Strictness::Credentialed,
         }
     }
 
@@ -101,17 +115,29 @@ impl HttpTransport {
     /// path cannot produce a double slash the backend routes differently.
     fn build(base_url: &str, credential: String, scheme: AuthScheme) -> Result<Self> {
         let base_url = base_url.trim().trim_end_matches('/').to_string();
-        check_base_url(&base_url)?;
+        let host = check_base_url(&base_url)?;
         Ok(Self {
+            agent: build_agent(REQUEST_TIMEOUT, scheme.strictness(), None, &host)?,
             base_url,
             credential,
             scheme,
             timezone: None,
-            agent: ureq::Agent::config_builder()
-                .timeout_global(Some(REQUEST_TIMEOUT))
-                .build()
-                .into(),
         })
+    }
+
+    /// Apply the host's proxy and TLS policy to this transport.
+    ///
+    /// The base-URL guard has already run and is not affected: a proxy carries
+    /// the request, it does not make plain HTTP to a remote host acceptable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidNetworkConfig`] when the proxy URL cannot be
+    /// used. Nothing is sent in that case.
+    pub fn with_network(mut self, network: Option<&ComposioTransportConfig>) -> Result<Self> {
+        let host = check_base_url(&self.base_url)?;
+        self.agent = build_agent(REQUEST_TIMEOUT, self.scheme.strictness(), network, &host)?;
+        Ok(self)
     }
 
     /// Send the user's IANA time zone as `TIMEZONE_HEADER` on every request.
@@ -175,17 +201,13 @@ impl Transport for HttpTransport {
         let agent = self.agent.clone();
         let (header, value) = self.auth_header();
         let timezone = self.timezone.clone();
+        let strictness = self.scheme.strictness();
         self.call(path, move || {
             let mut request = agent.get(&url).header(header, &value);
             if let Some(zone) = &timezone {
                 request = request.header(TIMEZONE_HEADER, zone);
             }
-            request
-                .call()
-                .map_err(|error| error.to_string())?
-                .body_mut()
-                .read_to_string()
-                .map_err(|error| error.to_string())
+            finish(&url, strictness, request.call())
         })
         .await
     }
@@ -196,17 +218,13 @@ impl Transport for HttpTransport {
         let (header, value) = self.auth_header();
         let body = body.clone();
         let timezone = self.timezone.clone();
+        let strictness = self.scheme.strictness();
         self.call(path, move || {
             let mut request = agent.post(&url).header(header, &value);
             if let Some(zone) = &timezone {
                 request = request.header(TIMEZONE_HEADER, zone);
             }
-            request
-                .send_json(&body)
-                .map_err(|error| error.to_string())?
-                .body_mut()
-                .read_to_string()
-                .map_err(|error| error.to_string())
+            finish(&url, strictness, request.send_json(&body))
         })
         .await
     }
@@ -216,17 +234,13 @@ impl Transport for HttpTransport {
         let agent = self.agent.clone();
         let (header, value) = self.auth_header();
         let timezone = self.timezone.clone();
+        let strictness = self.scheme.strictness();
         self.call(path, move || {
             let mut request = agent.delete(&url).header(header, &value);
             if let Some(zone) = &timezone {
                 request = request.header(TIMEZONE_HEADER, zone);
             }
-            request
-                .call()
-                .map_err(|error| error.to_string())?
-                .body_mut()
-                .read_to_string()
-                .map_err(|error| error.to_string())
+            finish(&url, strictness, request.call())
         })
         .await
     }
