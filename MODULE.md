@@ -31,6 +31,22 @@ user's own key.
 so it can render upstream UTC timestamps in the user's local time. Without it
 the backend renders UTC. Only IANA-shaped names are forwarded.
 
+Both routes also take an optional `"transport"` object (contract 1.10) carrying
+the host's network policy, already resolved for this service:
+
+```json
+{ "proxy_url": "http://127.0.0.1:8080", "no_proxy": ["localhost", ".internal"], "tls_roots": "platform" }
+```
+
+`proxy_url` (`http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`) routes
+every request through that proxy, except to a destination matching `no_proxy`
+(`*`, a domain and its subdomains, an IP, or a CIDR range). `tls_roots` is
+`"bundled"` (default) or `"platform"` (the operating system's certificate
+store). Without a proxy the process environment applies, as before. The direct
+route never follows a redirect, because its `x-api-key` header would follow it.
+A proxy URL that cannot be used fails the configuration rather than being
+ignored, and the failure never quotes the URL, which may embed credentials.
+
 The module implements both routes and selects neither — which one to use depends
 on whether the user is signed in and whether they supplied a key, and those are
 the host's decisions. Change route by reloading the module with a different
@@ -42,6 +58,17 @@ also refuses a `base_url` that is not HTTPS or a genuine loopback address, so a
 misconfiguration cannot send the credential somewhere it should not go. Loading
 without the credential its route needs fails, rather than producing a module
 that answers every call with a 401.
+
+### Reading as a credential that is not the configured one
+
+The module holds one configured route, so a host serving several credentials
+(or checking one it has not saved) cannot share it. `ListConnectionsDirect` and
+`ListToolsDirect` (contract 1.10) take the credential in the request itself:
+`api_key`, and optionally `entity_id`, `base_url` and `transport`. They use and
+replace nothing, keep nothing after the call, and apply no user scope
+preference. A failure is the message the user reads, for example
+`Composio v3 connected_accounts failed: HTTP 401: Invalid API key`, which is how
+a host tells a rejected key from an outage. The key is never logged or returned.
 
 ### The routes are not equivalent
 

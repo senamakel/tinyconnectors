@@ -4,6 +4,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
+use tinyconnectors_bus::ComposioTransportConfig;
+
+use super::network::{Strictness, build_agent};
 use super::transport::Transport;
 use crate::{Error, Result};
 
@@ -38,6 +41,17 @@ impl AuthScheme {
         match self {
             Self::Bearer => "authorization",
             Self::ApiKey => "x-api-key",
+        }
+    }
+
+    /// How strictly the transport treats a response. A credential sent as
+    /// `x-api-key` must never follow a redirect, and its failures carry the
+    /// provider's own message; the backend bearer keeps the established
+    /// behaviour.
+    fn strictness(self) -> Strictness {
+        match self {
+            Self::Bearer => Strictness::Backend,
+            Self::ApiKey => Strictness::Credentialed,
         }
     }
 
@@ -101,17 +115,29 @@ impl HttpTransport {
     /// path cannot produce a double slash the backend routes differently.
     fn build(base_url: &str, credential: String, scheme: AuthScheme) -> Result<Self> {
         let base_url = base_url.trim().trim_end_matches('/').to_string();
-        check_base_url(&base_url)?;
+        let host = check_base_url(&base_url)?;
         Ok(Self {
+            agent: build_agent(REQUEST_TIMEOUT, scheme.strictness(), None, &host)?,
             base_url,
             credential,
             scheme,
             timezone: None,
-            agent: ureq::Agent::config_builder()
-                .timeout_global(Some(REQUEST_TIMEOUT))
-                .build()
-                .into(),
         })
+    }
+
+    /// Apply the host's proxy and TLS policy to this transport.
+    ///
+    /// The base-URL guard has already run and is not affected: a proxy carries
+    /// the request, it does not make plain HTTP to a remote host acceptable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidNetworkConfig`] when the proxy URL cannot be
+    /// used. Nothing is sent in that case.
+    pub fn with_network(mut self, network: Option<&ComposioTransportConfig>) -> Result<Self> {
+        let host = check_base_url(&self.base_url)?;
+        self.agent = build_agent(REQUEST_TIMEOUT, self.scheme.strictness(), network, &host)?;
+        Ok(self)
     }
 
     /// Send the user's IANA time zone as `TIMEZONE_HEADER` on every request.
@@ -175,17 +201,13 @@ impl Transport for HttpTransport {
         let agent = self.agent.clone();
         let (header, value) = self.auth_header();
         let timezone = self.timezone.clone();
+        let strictness = self.scheme.strictness();
         self.call(path, move || {
             let mut request = agent.get(&url).header(header, &value);
             if let Some(zone) = &timezone {
                 request = request.header(TIMEZONE_HEADER, zone);
             }
-            request
-                .call()
-                .map_err(|error| error.to_string())?
-                .body_mut()
-                .read_to_string()
-                .map_err(|error| error.to_string())
+            finish(&url, strictness, request.call())
         })
         .await
     }
@@ -196,17 +218,13 @@ impl Transport for HttpTransport {
         let (header, value) = self.auth_header();
         let body = body.clone();
         let timezone = self.timezone.clone();
+        let strictness = self.scheme.strictness();
         self.call(path, move || {
             let mut request = agent.post(&url).header(header, &value);
             if let Some(zone) = &timezone {
                 request = request.header(TIMEZONE_HEADER, zone);
             }
-            request
-                .send_json(&body)
-                .map_err(|error| error.to_string())?
-                .body_mut()
-                .read_to_string()
-                .map_err(|error| error.to_string())
+            finish(&url, strictness, request.send_json(&body))
         })
         .await
     }
@@ -216,19 +234,92 @@ impl Transport for HttpTransport {
         let agent = self.agent.clone();
         let (header, value) = self.auth_header();
         let timezone = self.timezone.clone();
+        let strictness = self.scheme.strictness();
         self.call(path, move || {
             let mut request = agent.delete(&url).header(header, &value);
             if let Some(zone) = &timezone {
                 request = request.header(TIMEZONE_HEADER, zone);
             }
-            request
-                .call()
-                .map_err(|error| error.to_string())?
-                .body_mut()
-                .read_to_string()
-                .map_err(|error| error.to_string())
+            finish(&url, strictness, request.call())
         })
         .await
+    }
+}
+
+/// Turn one request's outcome into its body, or a failure message.
+///
+/// The backend route keeps the HTTP client's own wording. The credentialed
+/// route reports what the provider said instead, because the caller acts on it:
+/// a rejected key is told apart from an outage by `HTTP 401: Invalid API key`,
+/// not by a bare "status 401". Transport failures there read as
+/// `error sending request for url (..)`, the phrase failure classification
+/// already keys on.
+fn finish(
+    url: &str,
+    strictness: Strictness,
+    result: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+) -> std::result::Result<String, String> {
+    if strictness == Strictness::Backend {
+        return result
+            .map_err(|error| error.to_string())?
+            .body_mut()
+            .read_to_string()
+            .map_err(|error| error.to_string());
+    }
+    let mut response =
+        result.map_err(|error| format!("error sending request for url ({url}): {error}"))?;
+    let status = response.status().as_u16();
+    let body = response.body_mut().read_to_string();
+    if (200..300).contains(&status) {
+        return body.map_err(|error| error.to_string());
+    }
+    Err(status_message(status, &body.unwrap_or_default()))
+}
+
+/// Longest provider message kept in a failure.
+const ERROR_MESSAGE_MAX_CHARS: usize = 240;
+
+/// Field names a provider message may echo that identify the user's data.
+const REDACTED_MARKERS: [&str; 6] = [
+    "connected_account_id",
+    "connectedAccountId",
+    "entity_id",
+    "entityId",
+    "user_id",
+    "userId",
+];
+
+/// `HTTP <status>`, plus the provider's own message when the body carries one
+/// (`{"error":{"message":..}}` or `{"message":..}`), scrubbed of identifiers
+/// and bounded in length. Anything else about the body is dropped.
+fn status_message(status: u16, body: &str) -> String {
+    let Some(message) = api_error_message(body) else {
+        return format!("HTTP {status}");
+    };
+    let mut sanitized = message.replace('\n', " ");
+    for marker in REDACTED_MARKERS {
+        sanitized = sanitized.replace(marker, "[redacted]");
+    }
+    format!(
+        "HTTP {status}: {}",
+        truncate(&sanitized, ERROR_MESSAGE_MAX_CHARS)
+    )
+}
+
+fn api_error_message(body: &str) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(body).ok()?;
+    parsed
+        .get("error")
+        .and_then(|error| error.get("message"))
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| parsed.get("message").and_then(serde_json::Value::as_str))
+        .map(ToString::to_string)
+}
+
+fn truncate(text: &str, max_chars: usize) -> String {
+    match text.char_indices().nth(max_chars) {
+        Some((index, _)) => format!("{}...", text[..index].trim_end()),
+        None => text.to_string(),
     }
 }
 
@@ -240,7 +331,7 @@ impl Transport for HttpTransport {
 /// host `evil.com`, and an HTTP client routes it there — carrying the
 /// credential header with it. Embedded credentials are rejected outright for
 /// the same reason.
-fn check_base_url(base_url: &str) -> Result<()> {
+fn check_base_url(base_url: &str) -> Result<String> {
     let insecure = |reason| Error::InsecureBaseUrl {
         base_url: base_url.to_string(),
         reason,
@@ -250,8 +341,9 @@ fn check_base_url(base_url: &str) -> Result<()> {
     if !parsed.username().is_empty() || parsed.password().is_some() {
         return Err(insecure("URL carries embedded credentials"));
     }
+    let host = parsed.host_str().unwrap_or_default().to_string();
     match parsed.scheme() {
-        "https" => Ok(()),
+        "https" => Ok(host),
         "http" => {
             let loopback = match parsed.host() {
                 Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
@@ -260,7 +352,7 @@ fn check_base_url(base_url: &str) -> Result<()> {
                 None => false,
             };
             if loopback {
-                Ok(())
+                Ok(host)
             } else {
                 Err(insecure("plain HTTP is only allowed to a loopback address"))
             }

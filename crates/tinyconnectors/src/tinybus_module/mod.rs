@@ -40,15 +40,16 @@ use tinyconnectors_bus::{
     ComposioAuthorizeResponse, ComposioAvailableTriggersResponse, ComposioCapabilitiesResponse,
     ComposioConfigureRequest, ComposioConfigureResponse, ComposioConnectionsResponse,
     ComposioCreateTriggerRequest, ComposioCreateTriggerResponse, ComposioDeleteConnectionRequest,
-    ComposioDeleteResponse, ComposioDisableTriggerRequest, ComposioDisableTriggerResponse,
-    ComposioEnableTriggerRequest, ComposioEnableTriggerResponse, ComposioExecuteRequest,
-    ComposioExecuteResponse, ComposioGetUserScopesRequest, ComposioGithubReposResponse,
-    ComposioIdentityFailure, ComposioListAvailableTriggersRequest, ComposioListGithubReposRequest,
-    ComposioListToolsRequest, ComposioListTriggerHistoryRequest, ComposioListTriggersRequest,
+    ComposioDeleteResponse, ComposioDirectConnectionsRequest, ComposioDirectToolsRequest,
+    ComposioDisableTriggerRequest, ComposioDisableTriggerResponse, ComposioEnableTriggerRequest,
+    ComposioEnableTriggerResponse, ComposioExecuteRequest, ComposioExecuteResponse,
+    ComposioGetUserScopesRequest, ComposioGithubReposResponse, ComposioIdentityFailure,
+    ComposioListAvailableTriggersRequest, ComposioListGithubReposRequest, ComposioListToolsRequest,
+    ComposioListTriggerHistoryRequest, ComposioListTriggersRequest,
     ComposioRefreshIdentitiesResponse, ComposioSetUserScopesRequest, ComposioToolkitsResponse,
-    ComposioToolsResponse, ComposioTriggerHistoryResult, ComposioUserProfile,
-    ComposioUserProfileRequest, ComposioUserScopes, ComposioUserScopesResponse,
-    ConnectorSyncRequest, ConnectorSyncResponse, names,
+    ComposioToolsResponse, ComposioTransportConfig, ComposioTriggerHistoryResult,
+    ComposioUserProfile, ComposioUserProfileRequest, ComposioUserScopes,
+    ComposioUserScopesResponse, ConnectorSyncRequest, ConnectorSyncResponse, names,
 };
 
 use crate::client::{
@@ -100,6 +101,10 @@ pub(crate) enum RouteConfig {
         /// Optional: without it the backend renders UTC, as it always has.
         #[serde(default)]
         timezone: Option<String>,
+        /// Proxy and TLS settings for the backend connection. Optional: absent
+        /// means no proxy and bundled roots.
+        #[serde(default)]
+        transport: Option<ComposioTransportConfig>,
     },
     /// Reach Composio directly with a user-supplied key.
     Direct {
@@ -118,6 +123,10 @@ pub(crate) enum RouteConfig {
         /// server; production leaves it out and gets [`COMPOSIO_API_BASE`].
         #[serde(default)]
         base_url: Option<String>,
+        /// Proxy and TLS settings for the connection to Composio. Optional:
+        /// absent means no proxy and bundled roots.
+        #[serde(default)]
+        transport: Option<ComposioTransportConfig>,
     },
 }
 
@@ -196,20 +205,24 @@ impl RouteConfig {
                 base_url,
                 auth_token,
                 timezone,
+                transport,
             } => Some(Self::Proxy {
                 base_url,
                 auth_token,
                 timezone,
+                transport,
                 state_dir: None,
             }),
             ComposioConfigureRequest::Direct {
                 api_key,
                 entity_id,
                 base_url,
+                transport,
             } => Some(Self::Direct {
                 api_key,
                 entity_id,
                 base_url,
+                transport,
                 state_dir: None,
             }),
         }
@@ -237,11 +250,13 @@ impl RouteConfig {
                 base_url,
                 auth_token,
                 timezone,
+                transport,
                 ..
             } => {
                 let transport = Arc::new(
                     HttpTransport::bearer(&base_url, auth_token)?
-                        .with_timezone(timezone.as_deref()),
+                        .with_timezone(timezone.as_deref())
+                        .with_network(transport.as_ref())?,
                 );
                 Ok(Arc::new(ProxyRoute::new(transport)))
             }
@@ -249,10 +264,14 @@ impl RouteConfig {
                 api_key,
                 entity_id,
                 base_url,
+                transport,
                 ..
             } => {
                 let base_url = base_url.unwrap_or_else(|| COMPOSIO_API_BASE.to_string());
-                let transport = Arc::new(HttpTransport::api_key(&base_url, api_key.clone())?);
+                let transport = Arc::new(
+                    HttpTransport::api_key(&base_url, api_key.clone())?
+                        .with_network(transport.as_ref())?,
+                );
                 Ok(Arc::new(DirectRoute::new(
                     transport,
                     &api_key,
@@ -772,6 +791,32 @@ impl ConnectorService {
             .map_err(|error| tinybus::Error::failed(format!("history read failed: {error}")))?
             .map_err(|error| to_bus_error(&error))
     }
+
+    /// List connections with the credential the request carries.
+    ///
+    /// Reads and replaces nothing: the configured route is untouched and the
+    /// key is dropped when the call returns. The failure is the message a user
+    /// reads, verbatim (see [`crate::client::list_connections_direct`]), so a
+    /// host can tell a rejected key from an outage.
+    async fn list_connections_direct(
+        &self,
+        request: ComposioDirectConnectionsRequest,
+    ) -> TinyBusResult<ComposioConnectionsResponse> {
+        crate::client::list_connections_direct(&request.credential)
+            .await
+            .map_err(tinybus::Error::failed)
+    }
+
+    /// List tools with the credential the request carries. Stateless like
+    /// `ListConnectionsDirect`, and unfiltered by the user's scope preference.
+    async fn list_tools_direct(
+        &self,
+        request: ComposioDirectToolsRequest,
+    ) -> TinyBusResult<ComposioToolsResponse> {
+        crate::client::list_tools_direct(&request.credential, &request.toolkits, &request.tags)
+            .await
+            .map_err(tinybus::Error::failed)
+    }
 }
 
 /// The state store for a host that named a directory, or an ephemeral one.
@@ -949,3 +994,6 @@ export_module! {
 
 #[cfg(test)]
 mod test;
+
+#[cfg(test)]
+mod direct_test;
