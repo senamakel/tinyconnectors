@@ -1159,7 +1159,7 @@ async fn setup_on_the_direct_route_serves_too() -> tinybus::Result<()> {
     let reply: ComposioAgentReadyToolkitsResponse = proxy
         .call(names::methods::LIST_AGENT_READY_TOOLKITS, ())
         .await?;
-    assert!(!reply.toolkits.is_empty());
+    assert_ne!(reply.toolkits.len(), 0);
     Ok(())
 }
 
