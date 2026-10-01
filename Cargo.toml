@@ -65,8 +65,10 @@ tracing = "0.1"
 async-trait = "0.1"
 # The module's HTTP transport to the connector backend. Blocking by design —
 # it runs on a blocking task, which keeps a second async runtime out of a
-# cdylib that already owns one.
-ureq = { version = "3", features = ["json"] }
+# cdylib that already owns one. `platform-verifier` lets a host trust the OS
+# certificate store, and `socks-proxy` lets it route through a SOCKS proxy: the
+# two network policies a host applies to its own clients.
+ureq = { version = "3", features = ["json", "platform-verifier", "socks-proxy"] }
 # Base-URL validation in the HTTP transport. A parser, not a prefix match: a
 # `starts_with("http://127.0.0.1")` check is fooled by userinfo smuggling like
 # `http://127.0.0.1:8080@evil.com`, which resolves to `evil.com` and would take
