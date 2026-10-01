@@ -2,7 +2,12 @@
 //! CONNECT proxy that really tunnels, so a test can assert traffic went
 //! through it.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::format_push_string
+)]
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
