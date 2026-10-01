@@ -985,6 +985,8 @@ export_module! {
         "EnableTrigger",
         "DisableTrigger",
         "ListTriggerHistory",
+        "ListConnectionsDirect",
+        "ListToolsDirect",
     ],
     signals = [],
     requires = [],

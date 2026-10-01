@@ -191,3 +191,24 @@ fn a_load_time_blob_carries_network_settings_to_both_routes() {
     .unwrap();
     assert!(bad.into_route().is_err());
 }
+
+#[test]
+fn the_manifest_declares_every_member_the_contract_names_in_order() {
+    // The released artifact is refused by the loader's verification when its
+    // declared members differ from the contract's table, and that check only
+    // runs against a built module. Read the declaration from the source so the
+    // same drift fails here, in a unit test, before a release attempt does.
+    let source = include_str!("mod.rs");
+    let export = &source[source.rfind("export_module! {").expect("the export")..];
+    let list = export
+        .split("methods = [")
+        .nth(1)
+        .and_then(|rest| rest.split(']').next())
+        .expect("the methods declaration");
+    let declared: Vec<&str> = list
+        .split(',')
+        .map(|entry| entry.trim().trim_matches('"'))
+        .filter(|entry| !entry.is_empty())
+        .collect();
+    assert_eq!(declared, tinyconnectors_bus::METHODS);
+}
