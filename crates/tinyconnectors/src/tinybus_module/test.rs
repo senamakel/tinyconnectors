@@ -1295,6 +1295,7 @@ async fn a_module_loaded_without_a_route_becomes_usable_after_configure() {
             api_key: "sk-live".to_string(),
             entity_id: None,
             base_url: None,
+            transport: None,
         })
         .await
         .expect("a direct route is installable");
@@ -1319,6 +1320,7 @@ async fn configure_replaces_a_route_that_is_already_installed() {
             api_key: "sk-live".to_string(),
             entity_id: Some("ent_9".to_string()),
             base_url: None,
+            transport: None,
         })
         .await
         .expect("replacing a route is allowed");
@@ -1337,6 +1339,7 @@ async fn configure_refuses_a_base_url_that_would_leak_the_credential() {
             base_url: "http://evil.example.com".to_string(),
             auth_token: "tok".to_string(),
             timezone: None,
+            transport: None,
         })
         .await
         .expect_err("plain http to a public host must be refused");
@@ -1374,6 +1377,7 @@ async fn a_reconfigured_route_reaches_the_action_runner_too() {
             api_key: "sk-live".to_string(),
             entity_id: None,
             base_url: None,
+            transport: None,
         })
         .await
         .expect("install a route");
