@@ -100,6 +100,7 @@ fn a_proxy_configuration_is_tagged_exactly_like_the_load_time_blob() {
         base_url: "https://api.example.com".to_string(),
         auth_token: "tok".to_string(),
         timezone: None,
+        transport: None,
     })
     .expect("serialize");
 
@@ -117,6 +118,7 @@ fn a_proxy_configuration_carries_the_time_zone_and_older_blobs_still_decode() {
         base_url: "https://api.example.com".to_string(),
         auth_token: "tok".to_string(),
         timezone: Some("Asia/Kolkata".to_string()),
+        transport: None,
     })
     .expect("serialize");
     assert_eq!(json["timezone"], "Asia/Kolkata");
@@ -139,6 +141,7 @@ fn a_direct_configuration_omits_the_optional_fields_it_was_not_given() {
         api_key: "sk-1".to_string(),
         entity_id: None,
         base_url: None,
+        transport: None,
     })
     .expect("serialize");
 
@@ -146,6 +149,52 @@ fn a_direct_configuration_omits_the_optional_fields_it_was_not_given() {
     assert_eq!(json["api_key"], "sk-1");
     assert!(json.get("entity_id").is_none());
     assert!(json.get("base_url").is_none());
+    // Absent, not `null`: a host with no network settings looks like a pre-1.10
+    // host on the wire.
+    assert!(json.get("transport").is_none());
+}
+
+#[test]
+fn a_route_carries_network_settings_and_older_blobs_still_decode() {
+    let wire = serde_json::json!({
+        "route": "direct",
+        "api_key": "sk-3",
+        "transport": { "proxy_url": "http://127.0.0.1:3128", "no_proxy": ["localhost"] },
+    });
+    match serde_json::from_value(wire).expect("decode") {
+        ComposioConfigureRequest::Direct { transport, .. } => {
+            let transport = transport.expect("transport present");
+            assert_eq!(
+                transport.proxy_url.as_deref(),
+                Some("http://127.0.0.1:3128")
+            );
+            assert_eq!(transport.no_proxy, ["localhost"]);
+        }
+        other => panic!("decoded as the wrong route: {other:?}"),
+    }
+
+    let proxy = serde_json::json!({
+        "route": "proxy",
+        "base_url": "https://api.example.com",
+        "auth_token": "tok",
+        "transport": { "tls_roots": "platform" },
+    });
+    match serde_json::from_value(proxy).expect("decode") {
+        ComposioConfigureRequest::Proxy { transport, .. } => {
+            assert_eq!(
+                transport.expect("transport present").tls_roots,
+                crate::composio::direct::ComposioTlsRoots::Platform
+            );
+        }
+        other => panic!("decoded as the wrong route: {other:?}"),
+    }
+
+    // A 1.9 host sends none.
+    let older = serde_json::json!({ "route": "direct", "api_key": "sk" });
+    match serde_json::from_value(older).expect("decode") {
+        ComposioConfigureRequest::Direct { transport, .. } => assert!(transport.is_none()),
+        other => panic!("decoded as the wrong route: {other:?}"),
+    }
 }
 
 #[test]
