@@ -187,9 +187,12 @@ fn entry_matches(entry: &str, host: &str, ip: Option<IpAddr>) -> bool {
 
 fn in_cidr(network: IpAddr, bits: u8, ip: IpAddr) -> bool {
     match (network, ip) {
-        (IpAddr::V4(network), IpAddr::V4(ip)) if bits <= 32 => {
-            prefix_matches(u128::from(u32::from(network)), u128::from(u32::from(ip)), 32, bits)
-        }
+        (IpAddr::V4(network), IpAddr::V4(ip)) if bits <= 32 => prefix_matches(
+            u128::from(u32::from(network)),
+            u128::from(u32::from(ip)),
+            32,
+            bits,
+        ),
         (IpAddr::V6(network), IpAddr::V6(ip)) if bits <= 128 => {
             prefix_matches(u128::from(network), u128::from(ip), 128, bits)
         }

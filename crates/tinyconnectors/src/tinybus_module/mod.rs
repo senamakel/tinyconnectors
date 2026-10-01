@@ -40,15 +40,16 @@ use tinyconnectors_bus::{
     ComposioAuthorizeResponse, ComposioAvailableTriggersResponse, ComposioCapabilitiesResponse,
     ComposioConfigureRequest, ComposioConfigureResponse, ComposioConnectionsResponse,
     ComposioCreateTriggerRequest, ComposioCreateTriggerResponse, ComposioDeleteConnectionRequest,
-    ComposioDeleteResponse, ComposioDirectConnectionsRequest, ComposioDirectToolsRequest, ComposioDisableTriggerRequest, ComposioDisableTriggerResponse,
-    ComposioEnableTriggerRequest, ComposioEnableTriggerResponse, ComposioExecuteRequest,
-    ComposioExecuteResponse, ComposioGetUserScopesRequest, ComposioGithubReposResponse,
-    ComposioIdentityFailure, ComposioListAvailableTriggersRequest, ComposioListGithubReposRequest,
-    ComposioListToolsRequest, ComposioListTriggerHistoryRequest, ComposioListTriggersRequest,
+    ComposioDeleteResponse, ComposioDirectConnectionsRequest, ComposioDirectToolsRequest,
+    ComposioDisableTriggerRequest, ComposioDisableTriggerResponse, ComposioEnableTriggerRequest,
+    ComposioEnableTriggerResponse, ComposioExecuteRequest, ComposioExecuteResponse,
+    ComposioGetUserScopesRequest, ComposioGithubReposResponse, ComposioIdentityFailure,
+    ComposioListAvailableTriggersRequest, ComposioListGithubReposRequest, ComposioListToolsRequest,
+    ComposioListTriggerHistoryRequest, ComposioListTriggersRequest,
     ComposioRefreshIdentitiesResponse, ComposioSetUserScopesRequest, ComposioToolkitsResponse,
-    ComposioToolsResponse, ComposioTransportConfig, ComposioTriggerHistoryResult, ComposioUserProfile,
-    ComposioUserProfileRequest, ComposioUserScopes, ComposioUserScopesResponse,
-    ConnectorSyncRequest, ConnectorSyncResponse, names,
+    ComposioToolsResponse, ComposioTransportConfig, ComposioTriggerHistoryResult,
+    ComposioUserProfile, ComposioUserProfileRequest, ComposioUserScopes,
+    ComposioUserScopesResponse, ConnectorSyncRequest, ConnectorSyncResponse, names,
 };
 
 use crate::client::{
@@ -789,6 +790,32 @@ impl ConnectorService {
             .await
             .map_err(|error| tinybus::Error::failed(format!("history read failed: {error}")))?
             .map_err(|error| to_bus_error(&error))
+    }
+
+    /// List connections with the credential the request carries.
+    ///
+    /// Reads and replaces nothing: the configured route is untouched and the
+    /// key is dropped when the call returns. The failure is the message a user
+    /// reads, verbatim (see [`crate::client::list_connections_direct`]), so a
+    /// host can tell a rejected key from an outage.
+    async fn list_connections_direct(
+        &self,
+        request: ComposioDirectConnectionsRequest,
+    ) -> TinyBusResult<ComposioConnectionsResponse> {
+        crate::client::list_connections_direct(&request.credential)
+            .await
+            .map_err(tinybus::Error::failed)
+    }
+
+    /// List tools with the credential the request carries. Stateless like
+    /// `ListConnectionsDirect`, and unfiltered by the user's scope preference.
+    async fn list_tools_direct(
+        &self,
+        request: ComposioDirectToolsRequest,
+    ) -> TinyBusResult<ComposioToolsResponse> {
+        crate::client::list_tools_direct(&request.credential, &request.toolkits, &request.tags)
+            .await
+            .map_err(tinybus::Error::failed)
     }
 }
 

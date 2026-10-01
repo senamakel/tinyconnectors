@@ -300,7 +300,10 @@ fn status_message(status: u16, body: &str) -> String {
     for marker in REDACTED_MARKERS {
         sanitized = sanitized.replace(marker, "[redacted]");
     }
-    format!("HTTP {status}: {}", truncate(&sanitized, ERROR_MESSAGE_MAX_CHARS))
+    format!(
+        "HTTP {status}: {}",
+        truncate(&sanitized, ERROR_MESSAGE_MAX_CHARS)
+    )
 }
 
 fn api_error_message(body: &str) -> Option<String> {
