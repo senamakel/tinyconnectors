@@ -62,12 +62,15 @@ pub(super) fn build_agent(
             .http_status_as_error(false);
     }
     if let Some(network) = network {
-        if let Some(proxy) = proxy_for(network, host)? {
-            config = config.proxy(Some(proxy));
-        } else {
-            // An explicit "no proxy": do not let the library fall back to the
-            // process environment, which is not the host's policy.
-            config = config.proxy(None);
+        // No proxy URL means the host's policy leaves proxying to the process
+        // environment, which is the library's default and so is left alone. A
+        // proxy that the destination bypasses is different: the host chose one,
+        // and the answer for this destination is "none", not "whatever the
+        // environment says".
+        match proxy_for(network, host)? {
+            ProxyChoice::Environment => {}
+            ProxyChoice::Bypass => config = config.proxy(None),
+            ProxyChoice::Use(proxy) => config = config.proxy(Some(proxy)),
         }
         if network.tls_roots == ComposioTlsRoots::Platform {
             config = config.tls_config(
@@ -80,21 +83,30 @@ pub(super) fn build_agent(
     Ok(config.build().into())
 }
 
-/// The proxy to use for a request to `host`, if any.
-fn proxy_for(network: &ComposioTransportConfig, host: &str) -> Result<Option<Proxy>> {
+/// What the host's policy says about proxying a request to one host.
+enum ProxyChoice {
+    /// No proxy configured: the library's environment default applies.
+    Environment,
+    /// A proxy is configured and this destination is exempt from it.
+    Bypass,
+    /// Route through this proxy.
+    Use(Proxy),
+}
+
+fn proxy_for(network: &ComposioTransportConfig, host: &str) -> Result<ProxyChoice> {
     let Some(raw) = network
         .proxy_url
         .as_deref()
         .map(str::trim)
         .filter(|url| !url.is_empty())
     else {
-        return Ok(None);
+        return Ok(ProxyChoice::Environment);
     };
     if bypasses_proxy(&network.no_proxy, host) {
         tracing::debug!("[connectors][network] destination matches no_proxy; going direct");
-        return Ok(None);
+        return Ok(ProxyChoice::Bypass);
     }
-    parse_proxy(raw).map(Some)
+    parse_proxy(raw).map(ProxyChoice::Use)
 }
 
 fn invalid(reason: &'static str) -> Error {
@@ -139,7 +151,6 @@ fn decode(component: &str) -> String {
 
 /// Whether a request to `host` skips the proxy under `entries`.
 ///
-/// Public to the crate so the rule is testable on its own.
 pub(super) fn bypasses_proxy(entries: &[String], host: &str) -> bool {
     let host = host
         .trim()
