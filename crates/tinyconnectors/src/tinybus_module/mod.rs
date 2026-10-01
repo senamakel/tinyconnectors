@@ -40,13 +40,13 @@ use tinyconnectors_bus::{
     ComposioAuthorizeResponse, ComposioAvailableTriggersResponse, ComposioCapabilitiesResponse,
     ComposioConfigureRequest, ComposioConfigureResponse, ComposioConnectionsResponse,
     ComposioCreateTriggerRequest, ComposioCreateTriggerResponse, ComposioDeleteConnectionRequest,
-    ComposioDeleteResponse, ComposioDisableTriggerRequest, ComposioDisableTriggerResponse,
+    ComposioDeleteResponse, ComposioDirectConnectionsRequest, ComposioDirectToolsRequest, ComposioDisableTriggerRequest, ComposioDisableTriggerResponse,
     ComposioEnableTriggerRequest, ComposioEnableTriggerResponse, ComposioExecuteRequest,
     ComposioExecuteResponse, ComposioGetUserScopesRequest, ComposioGithubReposResponse,
     ComposioIdentityFailure, ComposioListAvailableTriggersRequest, ComposioListGithubReposRequest,
     ComposioListToolsRequest, ComposioListTriggerHistoryRequest, ComposioListTriggersRequest,
     ComposioRefreshIdentitiesResponse, ComposioSetUserScopesRequest, ComposioToolkitsResponse,
-    ComposioToolsResponse, ComposioTriggerHistoryResult, ComposioUserProfile,
+    ComposioToolsResponse, ComposioTransportConfig, ComposioTriggerHistoryResult, ComposioUserProfile,
     ComposioUserProfileRequest, ComposioUserScopes, ComposioUserScopesResponse,
     ConnectorSyncRequest, ConnectorSyncResponse, names,
 };
@@ -100,6 +100,10 @@ pub(crate) enum RouteConfig {
         /// Optional: without it the backend renders UTC, as it always has.
         #[serde(default)]
         timezone: Option<String>,
+        /// Proxy and TLS settings for the backend connection. Optional: absent
+        /// means no proxy and bundled roots.
+        #[serde(default)]
+        transport: Option<ComposioTransportConfig>,
     },
     /// Reach Composio directly with a user-supplied key.
     Direct {
@@ -118,6 +122,10 @@ pub(crate) enum RouteConfig {
         /// server; production leaves it out and gets [`COMPOSIO_API_BASE`].
         #[serde(default)]
         base_url: Option<String>,
+        /// Proxy and TLS settings for the connection to Composio. Optional:
+        /// absent means no proxy and bundled roots.
+        #[serde(default)]
+        transport: Option<ComposioTransportConfig>,
     },
 }
 
@@ -196,20 +204,24 @@ impl RouteConfig {
                 base_url,
                 auth_token,
                 timezone,
+                transport,
             } => Some(Self::Proxy {
                 base_url,
                 auth_token,
                 timezone,
+                transport,
                 state_dir: None,
             }),
             ComposioConfigureRequest::Direct {
                 api_key,
                 entity_id,
                 base_url,
+                transport,
             } => Some(Self::Direct {
                 api_key,
                 entity_id,
                 base_url,
+                transport,
                 state_dir: None,
             }),
         }
@@ -237,11 +249,13 @@ impl RouteConfig {
                 base_url,
                 auth_token,
                 timezone,
+                transport,
                 ..
             } => {
                 let transport = Arc::new(
                     HttpTransport::bearer(&base_url, auth_token)?
-                        .with_timezone(timezone.as_deref()),
+                        .with_timezone(timezone.as_deref())
+                        .with_network(transport.as_ref())?,
                 );
                 Ok(Arc::new(ProxyRoute::new(transport)))
             }
@@ -249,10 +263,14 @@ impl RouteConfig {
                 api_key,
                 entity_id,
                 base_url,
+                transport,
                 ..
             } => {
                 let base_url = base_url.unwrap_or_else(|| COMPOSIO_API_BASE.to_string());
-                let transport = Arc::new(HttpTransport::api_key(&base_url, api_key.clone())?);
+                let transport = Arc::new(
+                    HttpTransport::api_key(&base_url, api_key.clone())?
+                        .with_network(transport.as_ref())?,
+                );
                 Ok(Arc::new(DirectRoute::new(
                     transport,
                     &api_key,
