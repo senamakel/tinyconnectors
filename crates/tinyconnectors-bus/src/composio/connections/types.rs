@@ -101,7 +101,7 @@ pub enum ComposioConfigureRequest {
         /// Proxy and TLS settings for the backend connection. Absent means no
         /// proxy and bundled roots, as before. Added in contract 1.10.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        transport: Option<super::direct::ComposioTransportConfig>,
+        transport: Option<crate::composio::direct::ComposioTransportConfig>,
     },
     /// Reach Composio directly with a user-supplied key.
     Direct {
@@ -116,7 +116,7 @@ pub enum ComposioConfigureRequest {
         /// Proxy and TLS settings for the connection to Composio. Absent means
         /// no proxy and bundled roots, as before. Added in contract 1.10.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        transport: Option<super::direct::ComposioTransportConfig>,
+        transport: Option<crate::composio::direct::ComposioTransportConfig>,
     },
 }
 

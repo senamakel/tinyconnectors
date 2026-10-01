@@ -210,6 +210,7 @@ fn a_configuration_round_trips_through_the_wire_form() {
             api_key,
             entity_id,
             base_url,
+            ..
         } => {
             assert_eq!(api_key, "sk-2");
             assert_eq!(entity_id.as_deref(), Some("ent_1"));
