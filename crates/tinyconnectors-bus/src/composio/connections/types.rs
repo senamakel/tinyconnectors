@@ -98,6 +98,10 @@ pub enum ComposioConfigureRequest {
         /// Absent means UTC, as before. Added in contract 1.9.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         timezone: Option<String>,
+        /// Proxy and TLS settings for the backend connection. Absent means no
+        /// proxy and bundled roots, as before. Added in contract 1.10.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport: Option<super::direct::ComposioTransportConfig>,
     },
     /// Reach Composio directly with a user-supplied key.
     Direct {
@@ -109,6 +113,10 @@ pub enum ComposioConfigureRequest {
         /// Override for Composio's API base, for a loopback test server.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base_url: Option<String>,
+        /// Proxy and TLS settings for the connection to Composio. Absent means
+        /// no proxy and bundled roots, as before. Added in contract 1.10.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transport: Option<super::direct::ComposioTransportConfig>,
     },
 }
 

@@ -183,6 +183,23 @@ pub mod methods {
     /// caller cannot opt out of a restriction the user set.
     pub const SET_USER_SCOPES: &str = "SetUserScopes";
 
+    /// Lists connections with a credential supplied by the call.
+    ///
+    /// Takes a [`crate::ComposioDirectConnectionsRequest`] and returns a
+    /// [`crate::ComposioConnectionsResponse`]. Stateless: the configured route
+    /// is neither used nor replaced and the key is not kept, so a host can read
+    /// as several credentials at once, or check a candidate key before storing
+    /// it. Added in contract 1.10.
+    pub const LIST_CONNECTIONS_DIRECT: &str = "ListConnectionsDirect";
+
+    /// Lists tools with a credential supplied by the call.
+    ///
+    /// Takes a [`crate::ComposioDirectToolsRequest`] and returns a
+    /// [`crate::ComposioToolsResponse`]. Stateless, like
+    /// [`LIST_CONNECTIONS_DIRECT`]; the user's scope preference is not applied.
+    /// Added in contract 1.10.
+    pub const LIST_TOOLS_DIRECT: &str = "ListToolsDirect";
+
     /// Reads one batch of records out of a connected account.
     ///
     /// Takes a [`crate::ConnectorSyncRequest`] and returns a
@@ -226,6 +243,8 @@ pub const METHODS: &[&str] = &[
     methods::ENABLE_TRIGGER,
     methods::DISABLE_TRIGGER,
     methods::LIST_TRIGGER_HISTORY,
+    methods::LIST_CONNECTIONS_DIRECT,
+    methods::LIST_TOOLS_DIRECT,
 ];
 
 #[cfg(test)]
