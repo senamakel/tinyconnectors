@@ -22,8 +22,7 @@ fn a_full_transport_config_round_trips_with_snake_case_roots() {
     let wire = json!({
         "proxy_url": "http://127.0.0.1:8080",
         "no_proxy": ["localhost", ".internal"],
-        "tls_roots": "platform",
-        "extra_ca_pem": ["-----BEGIN CERTIFICATE-----"]
+        "tls_roots": "platform"
     });
     let config: ComposioTransportConfig = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(config.tls_roots, ComposioTlsRoots::Platform);

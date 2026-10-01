@@ -20,7 +20,7 @@ pub enum ComposioTlsRoots {
 /// How the module's HTTP client reaches the network.
 ///
 /// The host owns the policy (whether a proxy applies to this service at all,
-/// which proxy, which hosts bypass it) and resolves it to this description; the
+/// which proxy, which hosts bypass it, which roots are trusted) and resolves it to this description; the
 /// module applies it to the one destination it is about to call. An empty value
 /// is the module's historical behaviour: no proxy, bundled roots.
 ///
@@ -40,10 +40,6 @@ pub struct ComposioTransportConfig {
     /// Which root store to trust.
     #[serde(default, skip_serializing_if = "is_bundled")]
     pub tls_roots: ComposioTlsRoots,
-    /// Extra root certificates, PEM encoded, trusted in addition to
-    /// [`tls_roots`](Self::tls_roots).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub extra_ca_pem: Vec<String>,
 }
 
 // `skip_serializing_if` takes a path to `fn(&T) -> bool`.
@@ -59,7 +55,6 @@ impl fmt::Debug for ComposioTransportConfig {
             .field("proxy", &self.proxy_url.as_ref().map(|_| "<set>"))
             .field("no_proxy", &self.no_proxy)
             .field("tls_roots", &self.tls_roots)
-            .field("extra_ca_pem", &self.extra_ca_pem.len())
             .finish()
     }
 }
