@@ -115,6 +115,16 @@ pub enum Error {
         reason: &'static str,
     },
 
+    /// The network settings a host supplied cannot be applied.
+    ///
+    /// Raised before any request is made. The reason never quotes the proxy
+    /// URL, which can embed a username and password.
+    #[error("invalid network settings: {reason}")]
+    InvalidNetworkConfig {
+        /// What was wrong, without the offending value.
+        reason: &'static str,
+    },
+
     /// An OAuth host rate-limited the handoff and retries were exhausted.
     ///
     /// Distinct from [`Error::Authorize`] because it is not the user's request

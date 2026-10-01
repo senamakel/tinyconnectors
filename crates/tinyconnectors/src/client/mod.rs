@@ -32,14 +32,21 @@
 //! here would multiply the two.
 
 mod composio;
+mod direct_read;
 mod http;
+mod network;
 pub mod route;
 mod transport;
 
 pub use composio::ComposioClient;
+pub use direct_read::{
+    list_connections as list_connections_direct, list_tools as list_tools_direct,
+};
 pub use http::HttpTransport;
 pub use route::{COMPOSIO_API_BASE, DirectRoute, INVALID_API_KEY_THRESHOLD, ProxyRoute, Route};
 pub use transport::Transport;
 
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+pub(crate) mod test_support;
