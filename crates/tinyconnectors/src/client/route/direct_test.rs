@@ -460,3 +460,46 @@ async fn tool_listing_without_filters_still_pins_versions() {
         "/tools?limit=200&toolkit_versions=latest"
     );
 }
+
+#[tokio::test]
+async fn drops_a_blank_id_and_trims_a_padded_one() {
+    let transport = FakeTransport::replying(json!({
+        "items": [
+            { "id": "   ", "toolkit": "gmail", "status": "ACTIVE" },
+            { "id": "", "toolkit": "gmail", "status": "ACTIVE" },
+            { "id": "  ca_2 ", "toolkit": "slack", "status": "ACTIVE" }
+        ]
+    }));
+    let resp = route(transport).list_connections().await.unwrap();
+    assert_eq!(resp.connections.len(), 1);
+    assert_eq!(resp.connections[0].id, "ca_2");
+}
+
+#[tokio::test]
+async fn a_blank_toolkit_falls_back_to_the_app_name() {
+    let transport = FakeTransport::replying(json!({
+        "items": [
+            { "id": "a", "toolkit": " ", "app_name": " github ", "status": "ACTIVE" },
+            { "id": "b", "toolkit": { "slug": "", "name": "notion" }, "status": "ACTIVE" }
+        ]
+    }));
+    let resp = route(transport).list_connections().await.unwrap();
+    assert_eq!(resp.connections[0].toolkit, "github");
+    assert_eq!(resp.connections[1].toolkit, "notion");
+}
+
+#[tokio::test]
+async fn a_tool_without_a_description_is_described_by_its_name() {
+    let transport = FakeTransport::replying(json!({
+        "items": [
+            { "slug": "A_TOOL", "name": "A tool" },
+            { "slug": "", "description": "blank slug" }
+        ]
+    }));
+    let tools = route(transport).list_tools(&[], &[]).await.unwrap();
+    assert_eq!(tools.tools.len(), 1);
+    assert_eq!(
+        tools.tools[0].function.description.as_deref(),
+        Some("A tool")
+    );
+}

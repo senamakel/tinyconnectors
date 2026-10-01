@@ -178,6 +178,31 @@ fn field(item: &serde_json::Value, keys: &[&str]) -> Option<String> {
     None
 }
 
+/// Read a slug, skipping blank strings so a later key can still supply it.
+///
+/// Like [`field`], but trimmed, and an empty or whitespace-only value counts as
+/// absent. v3 has sent `"toolkit": ""` beside a usable `appName`.
+fn slug_field(item: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| match item.get(*key) {
+        Some(serde_json::Value::String(value)) => {
+            let value = value.trim();
+            (!value.is_empty()).then(|| value.to_string())
+        }
+        Some(serde_json::Value::Object(nested)) => {
+            ["slug", "id", "name", "key"]
+                .iter()
+                .find_map(|inner| match nested.get(*inner) {
+                    Some(serde_json::Value::String(value)) => {
+                        let value = value.trim();
+                        (!value.is_empty()).then(|| value.to_string())
+                    }
+                    _ => None,
+                })
+        }
+        _ => None,
+    })
+}
+
 /// Translate one v3 `connected_accounts` item into a [`ComposioConnection`].
 ///
 /// Defensive on every field: a row missing its toolkit or status is kept with
@@ -185,11 +210,27 @@ fn field(item: &serde_json::Value, keys: &[&str]) -> Option<String> {
 /// inactive. A malformed row therefore shows up as not-connected — which is the
 /// fail-safe direction — instead of disappearing and looking deleted.
 fn connection_from_v3(item: &serde_json::Value) -> Option<ComposioConnection> {
-    let id = field(item, &["id", "nanoid", "connectedAccountId"])?;
+    // A blank id is no id: an empty connection id sent on to v3 makes an invalid
+    // call, so the row is dropped, and a padded one is trimmed.
+    let id = field(item, &["id", "nanoid", "connectedAccountId"])?
+        .trim()
+        .to_string();
+    if id.is_empty() {
+        return None;
+    }
     Some(ComposioConnection {
         id,
-        toolkit: field(item, &["toolkit", "appName", "toolkit_slug", "appUniqueId"])
-            .unwrap_or_default(),
+        toolkit: slug_field(
+            item,
+            &[
+                "toolkit",
+                "appName",
+                "app_name",
+                "toolkit_slug",
+                "appUniqueId",
+            ],
+        )
+        .unwrap_or_default(),
         status: field(item, &["status", "connectionStatus"]).unwrap_or_default(),
         created_at: field(item, &["createdAt", "created_at"]),
         account_email: field(item, &["accountEmail", "email"]),
@@ -404,11 +445,17 @@ fn tool_schemas_from_v3(value: &serde_json::Value) -> Vec<crate::ComposioToolSch
             // A v3 row is the function itself, not the `{type, function}`
             // envelope a model expects, so it is wrapped here.
             let name = field(row, &["slug", "name"])?;
+            // A row with a blank slug cannot be called, and offering it to a
+            // model as a function with no name is worse than not listing it.
+            if name.is_empty() {
+                return None;
+            }
             Some(crate::ComposioToolSchema {
                 kind: "function".to_string(),
                 function: crate::ComposioToolFunction {
                     name,
-                    description: field(row, &["description"]),
+                    // v3 rows without a description are described by their name.
+                    description: field(row, &["description", "name"]),
                     parameters: row
                         .get("input_parameters")
                         .or_else(|| row.get("parameters"))
