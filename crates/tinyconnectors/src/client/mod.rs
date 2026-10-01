@@ -48,3 +48,5 @@ pub use transport::Transport;
 
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+pub(crate) mod test_support;

@@ -994,3 +994,6 @@ export_module! {
 
 #[cfg(test)]
 mod test;
+
+#[cfg(test)]
+mod direct_test;
