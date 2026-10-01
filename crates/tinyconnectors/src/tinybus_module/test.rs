@@ -1437,6 +1437,27 @@ async fn a_failed_execute_carries_an_error_class() {
 }
 
 #[tokio::test]
+async fn a_failed_enable_trigger_carries_an_error_class() {
+    // Enabling is driven from a settings screen; the class prefix is what lets
+    // the host say "reconnect" instead of echoing the provider's wording.
+    let transport = StubTransport::failing("rate limited");
+    let service = service_over(transport);
+
+    let error = service
+        .enable_trigger(ComposioEnableTriggerRequest {
+            connection_id: "c1".to_string(),
+            slug: "GITHUB_COMMIT_EVENT".to_string(),
+            trigger_config: None,
+        })
+        .await
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("[composio:error:"), "{error}");
+    assert!(error.contains("rate limited"), "{error}");
+}
+
+#[tokio::test]
 async fn a_depth_window_reaches_gmail_as_a_search_query() -> tinybus::Result<()> {
     // The host's "sync depth (days)" setting was a no-op for every connector:
     // the request had no field for it and the page read never asked. It now
