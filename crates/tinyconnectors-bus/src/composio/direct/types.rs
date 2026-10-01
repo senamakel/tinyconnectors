@@ -20,9 +20,10 @@ pub enum ComposioTlsRoots {
 /// How the module's HTTP client reaches the network.
 ///
 /// The host owns the policy (whether a proxy applies to this service at all,
-/// which proxy, which hosts bypass it, which roots are trusted) and resolves it to this description; the
-/// module applies it to the one destination it is about to call. An empty value
-/// is the module's historical behaviour: no proxy, bundled roots.
+/// which proxy, which hosts bypass it, which roots are trusted) and resolves it
+/// to this description; the module applies it to the one destination it is
+/// about to call. An empty value is the module's historical behaviour: no
+/// proxy, bundled roots.
 ///
 /// Added in contract 1.10. Every field is optional on the wire, so a host that
 /// omits the whole object, or a module that predates it, behaves as before.
