@@ -9,8 +9,8 @@
 
 use std::sync::LazyLock;
 
-use tinyconnectors_sync::PREFS_NAMESPACE;
 use tinyconnectors_bus::CollectionSpec;
+use tinyconnectors_sync::PREFS_NAMESPACE;
 
 pub use tinyconnectors_bus::StorageNeeds;
 

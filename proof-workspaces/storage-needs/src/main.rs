@@ -25,7 +25,10 @@ fn main() {
 
     assert_eq!(needs.collections[0].name, "records");
     assert_eq!(needs.collections[0].indexes[0].fields[0], "owner.id");
-    assert_eq!(needs.collections[0].ttl_field.as_deref(), Some("expires_at"));
+    assert_eq!(
+        needs.collections[0].ttl_field.as_deref(),
+        Some("expires_at")
+    );
     assert_eq!(
         needs.collections[0]
             .search
