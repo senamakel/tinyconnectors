@@ -155,16 +155,25 @@ async fn a_rejected_key_is_reported_rather_than_swallowed() {
 }
 
 #[test]
-fn the_declared_grant_matches_what_the_stores_write() {
-    // The host writes its grant from `STORAGE_NEEDS`; if the stores moved to
-    // another collection or stream prefix without it, every call would be
-    // refused by the grant.
-    assert_eq!(STORAGE_NEEDS.collections, &[PREFS_NAMESPACE]);
-    assert_eq!(STORAGE_NEEDS.stream_prefixes, &["triggers/"]);
+fn declared_storage_needs_cover_every_persisted_resource() {
+    // This is the exact schema the host uses when deciding which storage to
+    // grant. Preferences are one document per toolkit with no queried fields;
+    // trigger history is append-only under its daily stream prefix.
+    let needs = &*STORAGE_NEEDS;
+    assert_eq!(needs.collections.len(), 1);
+    let collection = &needs.collections[0];
+    assert_eq!(collection.name, PREFS_NAMESPACE);
+    assert!(collection.indexes.is_empty());
+    assert!(collection.ttl_field.is_none());
+    assert!(collection.search.is_none());
+    assert!(needs.blob_prefixes.is_empty());
+    assert_eq!(needs.stream_prefixes, &["triggers/"]);
+    assert!(needs.secret_prefixes.is_empty());
+
     let archive = crate::triggers::TriggerArchive::new(scoped("grant").streams().clone());
     assert!(
         archive
             .current_day_file()
-            .starts_with(STORAGE_NEEDS.stream_prefixes[0])
+            .starts_with(needs.stream_prefixes[0])
     );
 }

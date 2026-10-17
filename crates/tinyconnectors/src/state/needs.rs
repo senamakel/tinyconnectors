@@ -7,19 +7,30 @@
 //! rediscover by reading the code. Only the host runs `ensure_collection`;
 //! the module never creates a collection.
 
+use std::sync::LazyLock;
+
 use tinyconnectors_sync::PREFS_NAMESPACE;
+use tinyconnectors_bus::CollectionSpec;
 
-/// Collections and stream prefixes the module reads and writes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StorageNeeds {
-    /// Document collections: one document per toolkit, body `{ "value": … }`.
-    pub collections: &'static [&'static str],
-    /// Stream-name prefixes: one stream per UTC day, `triggers/<YYYY-MM-DD>`.
-    pub stream_prefixes: &'static [&'static str],
-}
+pub use tinyconnectors_bus::StorageNeeds;
 
-/// The grant the host gives this module.
-pub const STORAGE_NEEDS: StorageNeeds = StorageNeeds {
-    collections: &[PREFS_NAMESPACE],
-    stream_prefixes: &[crate::triggers::STREAM_PREFIX],
-};
+static PREFERENCE_COLLECTIONS: LazyLock<[CollectionSpec; 1]> = LazyLock::new(|| {
+    [CollectionSpec {
+        name: PREFS_NAMESPACE.to_owned(),
+        indexes: Vec::new(),
+        ttl_field: None,
+        search: None,
+    }]
+});
+
+static BLOB_PREFIXES: [&str; 0] = [];
+static STREAM_PREFIXES: [&str; 1] = [crate::triggers::STREAM_PREFIX];
+static SECRET_PREFIXES: [&str; 0] = [];
+
+/// The resources this module requests; host policy decides its storage grant.
+pub static STORAGE_NEEDS: LazyLock<StorageNeeds<'static>> = LazyLock::new(|| StorageNeeds {
+    collections: &PREFERENCE_COLLECTIONS[..],
+    blob_prefixes: &BLOB_PREFIXES,
+    stream_prefixes: &STREAM_PREFIXES,
+    secret_prefixes: &SECRET_PREFIXES,
+});

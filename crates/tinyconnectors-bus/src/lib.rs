@@ -140,6 +140,7 @@ pub use composio::{
 };
 pub use names::{INTERFACE, METHODS, OBJECT_PATH};
 pub use version::{CONTRACT_VERSION, is_compatible};
+pub use tinystoragedrivers_bus::{CollectionSpec, IndexSpec, SearchSpec, StorageNeeds};
 
 /// Portable connector vocabulary payloads; behavior is served by the module.
 pub mod vocabulary;
