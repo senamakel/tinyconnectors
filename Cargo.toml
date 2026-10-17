@@ -33,7 +33,7 @@ repository = "https://github.com/tinyhumansai/tinyconnectors"
 tinyconnectors-bus = { path = "crates/tinyconnectors-bus" }
 # Canonical storage-needs schemas for module declarations. Disable the legacy
 # TinyBus client: this data contract only needs the type definitions.
-tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "08caa16d1d4e3c6b8d649e4f26fe1a426ee1d168", default-features = false }
+tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }
 # The provider registry, scope catalogs and scope preferences. The module crate
 # depends on it for the capability, profile and user-scope members, which are
 # answered from what the registered providers know. It stays a separate crate so
@@ -42,13 +42,13 @@ tinyconnectors-sync = { path = "crates/tinyconnectors-sync" }
 # TinyBus defines the message types, interface macro, and frozen module ABI
 # used by the generated integration. Socket and CLI features are unnecessary
 # here.
-tinybus = { version = ">=0.1.3, <0.2", default-features = false, features = [
+tinybus = { version = "0.1.7", default-features = false, features = [
     "macros",
     "modules",
 ] }
 # The module-side SDK owns the isolated runtime and exports the ABI entrypoints
 # required by TinyBus's dynamic loader.
-tinybus-module = ">=0.1.3, <0.2"
+tinybus-module = "0.1.7"
 
 # Derive macros for the crate-wide error type in `crates/tinyconnectors/src/error/`.
 # Every dependency entry should carry a comment like this one saying why it is
