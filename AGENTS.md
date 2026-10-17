@@ -312,6 +312,9 @@ Releases use the canonical TinyHumans shared workflow. Update the package
 versions and matching local dependency constraints in a PR, regenerate the
 lockfiles, and merge only after the required shared CI checks pass. For a
 workspace using version.workspace, change its root workspace.package version.
+Also refresh `proof-workspaces/storage-needs/Cargo.lock` with
+`cargo update --manifest-path proof-workspaces/storage-needs/Cargo.toml --workspace`
+when that version changes; its independent consumer runs with `--locked`.
 
 Create and push a vX.Y.Z tag at the merged commit, or dispatch Release with
 an existing tag input. The workflow checks that the tagged commit is on main

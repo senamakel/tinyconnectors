@@ -16,8 +16,9 @@
 //! - [`composio`] — the value vocabulary of the Composio backend, one module
 //!   per payload family. Its types are re-exported at this root.
 //! - [`version`] — [`CONTRACT_VERSION`] and the [`is_compatible`] bind rule.
-//! - storage needs — `StorageNeeds` and its collection schema, re-exported from
-//!   the canonical `tinystoragedrivers-bus` contract.
+//! - [`STORAGE_NEEDS`] — the concrete storage declaration, with its
+//!   `StorageNeeds` type and collection schema re-exported from the canonical
+//!   `tinystoragedrivers-bus` contract.
 //!
 //! # One backend today, room for more
 //!

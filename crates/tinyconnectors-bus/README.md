@@ -83,12 +83,13 @@ graph from an independent consumer workspace.
 
 ## Storage needs
 
-`StorageNeeds` is re-exported directly from `tinystoragedrivers-bus`, together
-with `CollectionSpec`, `IndexSpec` and `SearchSpec`. It describes requested
-resources; the host remains responsible for choosing and binding the grant.
-TinyConnectors requests the `composio-user-scopes` collection with no indexes,
-TTL field or search schema, plus the `triggers/` stream prefix. It requests no
-blob or secret prefixes.
+`STORAGE_NEEDS` is the concrete declaration exported by this crate; its
+`StorageNeeds` value and `CollectionSpec`, `IndexSpec` and `SearchSpec` types
+come directly from `tinystoragedrivers-bus`. It describes requested resources;
+the host remains responsible for choosing and binding the grant. TinyConnectors
+requests the `composio-user-scopes` collection with no indexes, TTL field or
+search schema, plus the `triggers/` stream prefix. It requests no blob or secret
+prefixes.
 
 ## Making a call
 
