@@ -6,9 +6,9 @@ manifest="$repo_root/proof-workspaces/storage-needs/Cargo.toml"
 
 # This workspace has its own resolver and lockfile so the main workspace cannot
 # unify TinyBus features into the contract's dependency graph.
-cargo run --target-dir "$repo_root/target/storage-needs-consumer" --manifest-path "$manifest"
+cargo run --locked --target-dir "$repo_root/target/storage-needs-consumer" --manifest-path "$manifest"
 
-dependency_tree="$(cargo tree --manifest-path "$manifest" --prefix none -e normal,build)"
+dependency_tree="$(cargo tree --locked --manifest-path "$manifest" --prefix none -e normal,build)"
 if [[ "$dependency_tree" != *"tinyconnectors-storage-needs-consumer-proof v"* ||
     "$dependency_tree" != *"tinyconnectors-bus v"* ||
     "$dependency_tree" != *"tinystoragedrivers-bus v"* ]]; then

@@ -154,8 +154,8 @@ async fn a_rejected_key_is_reported_rather_than_swallowed() {
     ));
 }
 
-#[test]
-fn declared_storage_needs_cover_every_persisted_resource() {
+#[tokio::test]
+async fn declared_storage_needs_cover_every_persisted_resource() {
     // This is the exact schema the host uses when deciding which storage to
     // grant. Preferences are one document per toolkit with no queried fields;
     // trigger history is append-only under its daily stream prefix.
@@ -170,10 +170,28 @@ fn declared_storage_needs_cover_every_persisted_resource() {
     assert_eq!(needs.stream_prefixes, &["triggers/"]);
     assert!(needs.secret_prefixes.is_empty());
 
-    let archive = crate::triggers::TriggerArchive::new(scoped("grant").streams().clone());
-    assert!(
-        archive
-            .current_day_file()
-            .starts_with(needs.stream_prefixes[0])
-    );
+    let storage = scoped("declared-needs");
+    let documents = storage.documents().clone();
+    let preferences = DocumentPrefsStore::new(documents.clone());
+    preferences
+        .set("gmail", &json!({ "read": true }))
+        .await
+        .unwrap();
+    let saved = documents
+        .get(&collection.name, "gmail")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(saved.doc["value"]["read"], true);
+
+    let streams = storage.streams().clone();
+    let archive = crate::triggers::TriggerArchive::new(streams.clone());
+    archive
+        .record("gmail", "trigger", "event-1", "uuid-1", &json!({ "ok": true }))
+        .await
+        .unwrap();
+    let names = streams.streams(needs.stream_prefixes[0]).await.unwrap();
+    assert_eq!(names.len(), 1);
+    assert_eq!(names[0], archive.current_day_file());
+    assert!(names[0].starts_with(needs.stream_prefixes[0]));
 }

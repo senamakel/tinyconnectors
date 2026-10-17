@@ -110,6 +110,7 @@ pub use processing::{
     RecordTriggerRequest,
 };
 pub mod names;
+mod storage_needs;
 pub mod version;
 
 pub use composio::{
@@ -140,6 +141,7 @@ pub use composio::{
     ComposioUserScopesResponse,
 };
 pub use names::{INTERFACE, METHODS, OBJECT_PATH};
+pub use storage_needs::STORAGE_NEEDS;
 pub use tinystoragedrivers_bus::{CollectionSpec, IndexSpec, SearchSpec, StorageNeeds};
 pub use version::{CONTRACT_VERSION, is_compatible};
 
