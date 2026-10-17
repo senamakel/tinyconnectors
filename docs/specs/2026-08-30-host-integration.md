@@ -27,7 +27,9 @@ contract crate and compiles neither the connector module nor TinyBus.
 The module requests one `composio-user-scopes` document collection and the
 `triggers/` stream prefix. The collection has no index, TTL, or search schema;
 there are no blob or secret needs. These needs do not grant authority: the host
-selects the immutable grant and binds it to the authenticated caller.
+selects the immutable grant and binds it to the authenticated caller. The
+host reads the actual `tinyconnectors_bus::STORAGE_NEEDS` declaration rather
+than rebuilding it from module implementation code.
 
 OpenHuman vendors its modules as git submodules under `vendor/`, so:
 
