@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = ["."]
+
+[package]
+name = "tinyconnectors-storage-needs-consumer-proof"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+tinyconnectors-bus = { path = "../../crates/tinyconnectors-bus" }
+# Pin the canonical schema directly so this isolated consumer proves that the
+# re-export and the producer are the same type from the same data-only release.
+tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }

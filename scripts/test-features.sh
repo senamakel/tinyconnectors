@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 python3 scripts/test-e2e-version.py
 python3 scripts/test-script-contracts.py
+python3 scripts/test-storage-needs-consumer.py
 cargo test --locked --workspace
 cargo test --locked --workspace --all-features
 
@@ -19,6 +20,7 @@ if [ -n "$forbidden" ]; then
   echo "of transports, async runtimes, HTTP clients and native libraries." >&2
   exit 1
 fi
+bash scripts/test-storage-needs-consumer.sh
 case "${RUNNER_OS:-$(uname -s)}" in
   Windows|MINGW*|MSYS*|CYGWIN*) ;;
   *) python3 scripts/test-package-layout.py ;;
