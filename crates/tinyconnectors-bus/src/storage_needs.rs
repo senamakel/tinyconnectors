@@ -1,4 +1,4 @@
-//! Storage resources the TinyConnectors module requests from its host.
+//! Storage resources the `TinyConnectors` module requests from its host.
 
 use std::sync::LazyLock;
 

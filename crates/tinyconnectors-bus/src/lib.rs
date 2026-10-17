@@ -53,7 +53,7 @@
 //! That is also a structural necessity, not only a preference: `tinybus` is
 //! vendored as a submodule whose manifest inherits fields from its own nested
 //! `[workspace.package]`. The direct `tinystoragedrivers-bus` dependency has
-//! default features disabled, so its optional TinyBus client is absent here.
+//! default features disabled, so its optional `TinyBus` client is absent here.
 //!
 //! **No credentials.** Nothing here holds an API key, a token, or a refresh
 //! secret. The OAuth handoff crosses this boundary as a URL the user opens and
