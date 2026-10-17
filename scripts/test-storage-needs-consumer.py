@@ -72,7 +72,7 @@ def good_tree():
             "serde v1.0.229",
             "serde_json v1.0.154",
         ]
-    )
+    ) + "\n"
 
 
 def add_dependency(metadata, package_id, package_name, *, kind=None, features=None):
@@ -105,6 +105,24 @@ class StorageNeedsConsumerTests(unittest.TestCase):
         add_dependency(metadata, "registry#tinybus@0.1.7", "tinybus", kind="build")
         with self.assertRaisesRegex(ProofError, "forbidden packages: tinybus"):
             validate_consumer_graph(metadata, good_tree() + "\ntinybus v0.1.7")
+
+    def test_rejects_storage_driver_implementation_dependency(self):
+        metadata = good_metadata()
+        add_dependency(metadata, "git#tinystoragedrivers-client@1.0.0", "tinystoragedrivers-client")
+        with self.assertRaisesRegex(ProofError, "tinystoragedrivers-client"):
+            validate_consumer_graph(metadata, good_tree() + "tinystoragedrivers-client v1.0.0\n")
+
+    def test_rejects_tinyconnectors_implementation_dependency(self):
+        metadata = good_metadata()
+        add_dependency(metadata, "path#tinyconnectors@0.20.0", "tinyconnectors")
+        with self.assertRaisesRegex(ProofError, "forbidden packages: tinyconnectors"):
+            validate_consumer_graph(metadata, good_tree() + "tinyconnectors v0.20.0\n")
+
+    def test_rejects_async_runtime_dependency(self):
+        metadata = good_metadata()
+        add_dependency(metadata, "registry#tokio@1.0.0", "tokio")
+        with self.assertRaisesRegex(ProofError, "forbidden packages: tokio"):
+            validate_consumer_graph(metadata, good_tree() + "tokio v1.0.0\n")
 
     def test_dev_only_forbidden_dependency_is_outside_the_normal_build_graph(self):
         metadata = good_metadata()
