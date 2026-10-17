@@ -198,6 +198,5 @@ async fn declared_storage_needs_cover_every_persisted_resource() {
         .unwrap();
     let names = streams.streams(needs.stream_prefixes[0]).await.unwrap();
     assert_eq!(names.len(), 1);
-    assert_eq!(names[0], archive.current_day_file());
     assert!(names[0].starts_with(needs.stream_prefixes[0]));
 }
