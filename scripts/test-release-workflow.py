@@ -9,6 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github/workflows/release.yml"
 REVIEWED_RELEASE_PIN = "837d0424c7f38e4293f41c795f12ed5eb5dd7280"
+LEGACY_RELEASE_PIN = "4adc1080fb495098e7af1aade82ed7e6e3c69bb7"
 
 
 def resolve_script(workflow):
@@ -95,18 +96,28 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("reviewed_pr is only valid", result.stderr)
         ordinary = job_block(self.workflow, "module-release")
+        self.assertRegex(
+            ordinary,
+            rf"(?m)^    uses: tinyhumansai/\.github/\.github/workflows/module-release\.yml@{LEGACY_RELEASE_PIN}$",
+        )
         self.assertIn("module-crate: tinyconnectors", ordinary)
         self.assertNotIn("extra-packaged-files:", ordinary)
         self.assertNotIn("inputs.package", self.workflow)
         self.assertNotIn("inputs.repo", self.workflow)
 
-    def test_reviewed_workflow_has_exact_full_commit_pin(self):
+    def test_shared_workflows_have_exact_full_commit_pins(self):
         reviewed = job_block(self.workflow, "module-reviewed-epic-release")
         self.assertRegex(
             reviewed,
             rf"(?m)^    uses: tinyhumansai/\.github/\.github/workflows/module-reviewed-epic-release\.yml@{REVIEWED_RELEASE_PIN}$",
         )
         self.assertEqual(len(REVIEWED_RELEASE_PIN), 40)
+        refs = re.findall(
+            r"(?m)^    uses: tinyhumansai/\.github/\.github/workflows/[^@\s]+@([0-9a-f]+)$",
+            self.workflow,
+        )
+        self.assertEqual(len(refs), 2, refs)
+        self.assertTrue(all(len(ref) == 40 for ref in refs), refs)
 
     def test_release_routes_are_exclusive_and_permissions_are_minimal(self):
         ordinary = job_block(self.workflow, "module-release")
