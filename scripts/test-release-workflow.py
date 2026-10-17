@@ -144,6 +144,22 @@ class ReleaseWorkflowTests(unittest.TestCase):
         })
         self.assertIn("reviewed-pr: ${{ fromJSON(needs.resolve.outputs.reviewed_pr) }}", reviewed)
 
+    def test_release_dependencies_match_the_published_bus_and_sdk_sources(self):
+        manifest = (ROOT / "Cargo.toml").read_text()
+        self.assertIn(
+            'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
+            'rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }',
+            manifest,
+        )
+        self.assertRegex(manifest, r'(?m)^tinybus = \{ version = "0\.1\.7",')
+        self.assertRegex(manifest, r'(?m)^tinybus-module = "0\.1\.7"$')
+        tree_entry = subprocess.run(
+            ["git", "ls-tree", "HEAD", "vendor/tinybus"], cwd=ROOT,
+            text=True, capture_output=True, check=True,
+        ).stdout.split()
+        self.assertEqual(tree_entry[:2], ["160000", "commit"])
+        self.assertEqual(tree_entry[2], "ed1ee4f5ee561c0320fa715eef114e0f1b888e41")
+
 
 if __name__ == "__main__":
     unittest.main()
