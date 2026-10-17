@@ -30,7 +30,7 @@ SERDE_JSON_ID = "registry+https://github.com/rust-lang/crates.io-index#serde_jso
 
 
 def edge(name, package_id, kind=None):
-    return {"name": name, "pkg": package_id, "dep_kinds": [{"kind": kind, "target": None}]}
+    return {"name": name.replace("-", "_"), "pkg": package_id, "dep_kinds": [{"kind": kind, "target": None}]}
 
 
 def good_metadata():
