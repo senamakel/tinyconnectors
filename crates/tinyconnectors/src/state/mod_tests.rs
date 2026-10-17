@@ -187,7 +187,13 @@ async fn declared_storage_needs_cover_every_persisted_resource() {
     let streams = storage.streams().clone();
     let archive = crate::triggers::TriggerArchive::new(streams.clone());
     archive
-        .record("gmail", "trigger", "event-1", "uuid-1", &json!({ "ok": true }))
+        .record(
+            "gmail",
+            "trigger",
+            "event-1",
+            "uuid-1",
+            &json!({ "ok": true }),
+        )
         .await
         .unwrap();
     let names = streams.streams(needs.stream_prefixes[0]).await.unwrap();
