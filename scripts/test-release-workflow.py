@@ -39,39 +39,53 @@ class ReleaseWorkflowTests(unittest.TestCase):
         cls.workflow = WORKFLOW.read_text()
         cls.script = resolve_script(cls.workflow)
 
-    def run_resolve(self, mode="main", reviewed_pr="", event="workflow_dispatch"):
+    def run_resolve(self, mode="main", reviewed_pr="", event="workflow_dispatch", tag="v1.2.3"):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output"
             effective_mode = "main" if event == "push" else mode
-            env = dict(os.environ, TAG="v1.2.3", RELEASE_MODE=effective_mode,
+            env = dict(os.environ, TAG=tag, RELEASE_MODE=effective_mode,
                        REVIEWED_PR=reviewed_pr, GITHUB_OUTPUT=str(output))
             if event == "push":
                 env["TAG"] = "v2.3.4"
             result = subprocess.run(["bash", "-c", self.script], env=env,
-                                    text=True, capture_output=True)
+                                    cwd=directory, text=True, capture_output=True)
             return result, output.read_text() if output.exists() else ""
+
+    def output_values(self, output):
+        return dict(line.split("=", maxsplit=1) for line in output.splitlines())
 
     def test_manual_default_and_explicit_main_route_to_legacy_release(self):
         self.assertIn("default: main", self.workflow)
         result, output = self.run_resolve("main")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("release_mode=main", output)
-        self.assertIn("reviewed_pr=0", output)
+        self.assertEqual(self.output_values(output), {
+            "tag": "v1.2.3",
+            "version": "1.2.3",
+            "release_mode": "main",
+            "reviewed_pr": "0",
+        })
         self.assertIn("github.event_name == 'push' && 'main' || inputs.release_mode", self.workflow)
         self.assertIn("github.event_name == 'push' && github.ref_name || inputs.tag", self.workflow)
 
     def test_tag_push_forces_legacy_release_mode(self):
         result, output = self.run_resolve("reviewed-epic", "", event="push")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("tag=v2.3.4", output)
-        self.assertIn("release_mode=main", output)
-        self.assertIn("reviewed_pr=0", output)
+        self.assertEqual(self.output_values(output), {
+            "tag": "v2.3.4",
+            "version": "2.3.4",
+            "release_mode": "main",
+            "reviewed_pr": "0",
+        })
 
     def test_reviewed_epic_requires_and_forwards_positive_integer_pr(self):
         result, output = self.run_resolve("reviewed-epic", "91")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("release_mode=reviewed-epic", output)
-        self.assertIn("reviewed_pr=91", output)
+        self.assertEqual(self.output_values(output), {
+            "tag": "v1.2.3",
+            "version": "1.2.3",
+            "release_mode": "reviewed-epic",
+            "reviewed_pr": "91",
+        })
 
     def test_reviewed_epic_rejects_missing_zero_and_non_integer_prs(self):
         for value in ("", "0", "-1", "1.5", "abc", "01"):
@@ -84,10 +98,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         result, _ = self.run_resolve("other")
         self.assertEqual(result.returncode, 2)
         self.assertIn("release_mode must be main or reviewed-epic", result.stderr)
-        env = dict(os.environ, TAG="1.2.3", RELEASE_MODE="main", REVIEWED_PR="",
-                   GITHUB_OUTPUT="/dev/null")
-        result = subprocess.run(["bash", "-c", self.script], env=env,
-                                text=True, capture_output=True)
+        result, _ = self.run_resolve(tag="1.2.3")
         self.assertEqual(result.returncode, 2)
         self.assertIn("tag must be v-prefixed semver", result.stderr)
 
