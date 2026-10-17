@@ -41,7 +41,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
     def run_resolve(self, mode="main", reviewed_pr="", event="workflow_dispatch"):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "output"
-            env = dict(os.environ, TAG="v1.2.3", RELEASE_MODE=mode,
+            effective_mode = "main" if event == "push" else mode
+            env = dict(os.environ, TAG="v1.2.3", RELEASE_MODE=effective_mode,
                        REVIEWED_PR=reviewed_pr, GITHUB_OUTPUT=str(output))
             if event == "push":
                 env["TAG"] = "v2.3.4"
@@ -82,7 +83,6 @@ class ReleaseWorkflowTests(unittest.TestCase):
         result, _ = self.run_resolve("other")
         self.assertEqual(result.returncode, 2)
         self.assertIn("release_mode must be main or reviewed-epic", result.stderr)
-        result, _ = self.run_resolve()
         env = dict(os.environ, TAG="1.2.3", RELEASE_MODE="main", REVIEWED_PR="",
                    GITHUB_OUTPUT="/dev/null")
         result = subprocess.run(["bash", "-c", self.script], env=env,
