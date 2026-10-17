@@ -31,3 +31,15 @@ workflow builds each native module from the tagged source and records its exact
 digest in the adjacent allowlist. After publishing, it downloads the Ubuntu
 x86_64 archive through TinyBus's GitHub release API and calls `Greet` over an
 in-memory bus.
+
+## Reviewed-epic admission
+
+The release workflow keeps ordinary `v*` tag pushes and manual releases on the
+existing shared module-release workflow and its fixed TinyConnectors package
+profile. A manual dispatch may instead select `reviewed-epic` and provide a
+positive canonical pull-request number. The two release jobs are mutually
+exclusive; reviewed-epic mode calls the pinned shared reviewed-release
+workflow, which admits only the tag at the reviewed pull request's merged
+commit after its required checks pass. The PR number is not accepted on the
+ordinary path. Package and archive settings remain repository-owned rather
+than dispatch inputs.
