@@ -24,3 +24,7 @@ pub static STORAGE_NEEDS: LazyLock<StorageNeeds<'static>> = LazyLock::new(|| Sto
     stream_prefixes: &STREAM_PREFIXES,
     secret_prefixes: &SECRET_PREFIXES,
 });
+
+#[cfg(test)]
+#[path = "storage_needs_tests.rs"]
+mod tests;
