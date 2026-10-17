@@ -73,9 +73,11 @@ else.
 
 ### The two-crate split
 
-`crates/tinyconnectors-bus` holds every type that crosses the bus and the names of the
-members that carry them. It has no transport, no runtime, and no behavior, and
-CI asserts it stays that way. A host that only makes calls depends on it alone.
+`crates/tinyconnectors-bus` holds every type that crosses the bus and the names
+of the members that carry them, including the canonical `StorageNeeds` and
+collection schema from `tinystoragedrivers-bus`. Its TSD dependency disables
+default features, so it has no transport, runtime, or behavior, and CI asserts
+it stays that way. A host that only makes calls depends on it alone.
 
 `crates/tinyconnectors` depends on it and re-exports all of it, so
 `tinyconnectors::ComposioConnection` and `tinyconnectors_bus::ComposioConnection`
@@ -200,6 +202,9 @@ add one:
   crate needs it, and take it with `{ workspace = true }`;
 - never add one to `crates/tinyconnectors-bus` that pulls in a transport, an async
   runtime, an HTTP client, or a native library — CI fails the build if you do;
+- when `tinyconnectors-bus` uses `tinystoragedrivers-bus`, pin the canonical
+  release and keep `default-features = false` so the optional TinyBus client
+  stays out of the contract dependency graph;
 - leave a comment above the entry explaining *why* the crate is needed and what
   uses it — see the existing entries for the expected tone;
 - prefer well-maintained crates with a compatible license.
