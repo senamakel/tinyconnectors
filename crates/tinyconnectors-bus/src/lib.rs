@@ -16,6 +16,8 @@
 //! - [`composio`] — the value vocabulary of the Composio backend, one module
 //!   per payload family. Its types are re-exported at this root.
 //! - [`version`] — [`CONTRACT_VERSION`] and the [`is_compatible`] bind rule.
+//! - storage needs — `StorageNeeds` and its collection schema, re-exported from
+//!   the canonical `tinystoragedrivers-bus` contract.
 //!
 //! # One backend today, room for more
 //!
@@ -49,9 +51,8 @@
 //!
 //! That is also a structural necessity, not only a preference: `tinybus` is
 //! vendored as a submodule whose manifest inherits fields from its own nested
-//! `[workspace.package]`. A crate that every workspace member can depend on has
-//! to stay transport-free, and staying transport-free is what keeps this crate
-//! down to two pure-Rust dependencies.
+//! `[workspace.package]`. The direct `tinystoragedrivers-bus` dependency has
+//! default features disabled, so its optional TinyBus client is absent here.
 //!
 //! **No credentials.** Nothing here holds an API key, a token, or a refresh
 //! secret. The OAuth handoff crosses this boundary as a URL the user opens and
