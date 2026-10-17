@@ -154,6 +154,16 @@ class ReleaseWorkflowTests(unittest.TestCase):
         )
         self.assertRegex(manifest, r'(?m)^tinybus = \{ version = "0\.1\.7",')
         self.assertRegex(manifest, r'(?m)^tinybus-module = "0\.1\.7"$')
+        self.assertIn(
+            '[patch.crates-io]\ntinybus = { path = "vendor/tinybus/crates/tinybus" }\n'
+            'tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }',
+            manifest,
+        )
+        self.assertIn(
+            '[patch."https://github.com/tinyhumansai/tinybus"]\n'
+            'tinybus = { path = "vendor/tinybus/crates/tinybus" }',
+            manifest,
+        )
         tree_entry = subprocess.run(
             ["git", "ls-tree", "HEAD", "vendor/tinybus"], cwd=ROOT,
             text=True, capture_output=True, check=True,
