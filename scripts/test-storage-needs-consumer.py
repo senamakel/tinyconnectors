@@ -210,6 +210,7 @@ class StorageNeedsConsumerTests(unittest.TestCase):
         self.assertIn(proof_manifest, calls[1])
         self.assertIn("--locked", calls[2])
         self.assertIn("normal,build", calls[2])
+        self.assertEqual(calls[2][calls[2].index("--target") + 1], "all")
 
 
 if __name__ == "__main__":

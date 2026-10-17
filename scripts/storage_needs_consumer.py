@@ -156,23 +156,28 @@ def normal_build_packages(metadata: dict[str, object]) -> dict[str, dict[str, ob
 def validate_consumer_graph(metadata: dict[str, object], tree: str) -> None:
     """Validate source identity, feature state, and closed normal/build reachability."""
     reachable = normal_build_packages(metadata)
-    resolve = metadata["resolve"]
-    assert isinstance(resolve, dict)
-    root_id = resolve["root"]
-    assert isinstance(root_id, str)
+    resolve = metadata.get("resolve")
+    packages = metadata.get("packages")
+    if not isinstance(resolve, dict) or not isinstance(packages, list):
+        raise _error("Cargo package or resolve metadata is missing")
+    root_id = resolve.get("root")
+    nodes = resolve.get("nodes")
+    if not isinstance(root_id, str) or not isinstance(nodes, list):
+        raise _error("Cargo resolve root or node list is missing")
     packages_by_id = {
         package["id"]: package
-        for package in metadata["packages"]
+        for package in packages
         if isinstance(package, dict) and isinstance(package.get("id"), str)
     }
     nodes_by_id = {
         node["id"]: node
-        for node in resolve["nodes"]
+        for node in nodes
         if isinstance(node, dict) and isinstance(node.get("id"), str)
     }
-    root_node = nodes_by_id[root_id]
-
-    root_package = packages_by_id[root_id]
+    root_node = nodes_by_id.get(root_id)
+    root_package = packages_by_id.get(root_id)
+    if root_node is None or root_package is None:
+        raise _error("Cargo resolve root evidence is missing")
     if _package_name(root_package, root_id) != EXPECTED_PROOF_PACKAGE:
         raise _error("resolve root is not the isolated consumer package")
 
@@ -304,7 +309,18 @@ def verify_consumer(
     )
     tree_result = _run_cargo(
         cargo_command,
-        ["tree", "--locked", "--manifest-path", str(manifest), "--prefix", "none", "--edges", "normal,build"],
+        [
+            "tree",
+            "--locked",
+            "--manifest-path",
+            str(manifest),
+            "--prefix",
+            "none",
+            "--edges",
+            "normal,build",
+            "--target",
+            "all",
+        ],
         repo_root=repo_root,
         env=environment,
         capture_output=True,
