@@ -60,7 +60,7 @@ def _package_name(package: object, package_id: str) -> str:
 def _normalize_cargo_dependency_name(name: object) -> str | None:
     if not isinstance(name, str) or not name:
         return None
-    return name.replace("_", "-")
+    return name.replace("-", "_")
 
 
 def _is_forbidden_package(name: str) -> bool:
@@ -145,7 +145,7 @@ def normal_build_packages(metadata: dict[str, object]) -> dict[str, dict[str, ob
             if dep_package is None:
                 raise _error(f"normal/build dependency package is missing for {dep_id}")
             dep_name = _package_name(dep_package, dep_id)
-            if _normalize_cargo_dependency_name(dep.get("name")) != dep_name:
+            if _normalize_cargo_dependency_name(dep.get("name")) != _normalize_cargo_dependency_name(dep_name):
                 raise _error(f"dependency edge name does not match package id {dep_id}")
             if dep_id not in nodes_by_id:
                 raise _error(f"normal/build resolve evidence is missing for {dep_id}")
@@ -206,7 +206,8 @@ def validate_consumer_graph(metadata: dict[str, object], tree: str) -> None:
     direct_storage_dependency = any(
         isinstance(dep, dict)
         and dep.get("pkg") == storage_id
-        and _normalize_cargo_dependency_name(dep.get("name")) == EXPECTED_STORAGE_NEEDS_CRATE
+        and _normalize_cargo_dependency_name(dep.get("name"))
+        == _normalize_cargo_dependency_name(EXPECTED_STORAGE_NEEDS_CRATE)
         and isinstance(dep.get("dep_kinds"), list)
         and _has_kind(dep["dep_kinds"], {None})
         for dep in root_deps
