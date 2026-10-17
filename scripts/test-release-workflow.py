@@ -8,6 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github/workflows/release.yml"
+CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
 REVIEWED_RELEASE_PIN = "837d0424c7f38e4293f41c795f12ed5eb5dd7280"
 LEGACY_RELEASE_PIN = "4adc1080fb495098e7af1aade82ed7e6e3c69bb7"
 
@@ -159,6 +160,16 @@ class ReleaseWorkflowTests(unittest.TestCase):
         ).stdout.split()
         self.assertEqual(tree_entry[:2], ["160000", "commit"])
         self.assertEqual(tree_entry[2], "ed1ee4f5ee561c0320fa715eef114e0f1b888e41")
+
+    def test_python_release_contract_job_checks_out_source_with_read_only_access(self):
+        ci = CI_WORKFLOW.read_text()
+        job = job_block(ci, "release-workflow-tests")
+        self.assertEqual(job_permissions(job), {"contents": "read"})
+        self.assertRegex(
+            job,
+            r"(?m)^    steps:\n      - uses: actions/checkout@[0-9a-f]{40} # v4\.4\.0$",
+        )
+        self.assertIn("run: python3 scripts/test-release-workflow.py", job)
 
 
 if __name__ == "__main__":
