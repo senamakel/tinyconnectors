@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github/workflows/release.yml"
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
-REVIEWED_RELEASE_PIN = "837d0424c7f38e4293f41c795f12ed5eb5dd7280"
+REVIEWED_RELEASE_PIN = "1e28317c435a9c714002199e65d18a1067fa5777"
 LEGACY_RELEASE_PIN = "4adc1080fb495098e7af1aade82ed7e6e3c69bb7"
 
 
@@ -147,13 +147,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_release_dependencies_match_the_published_bus_and_sdk_sources(self):
         manifest = (ROOT / "Cargo.toml").read_text()
+        self.assertIn('version = "0.20.1"', manifest)
         self.assertIn(
             'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
             'rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }',
             manifest,
         )
-        self.assertRegex(manifest, r'(?m)^tinybus = \{ version = "0\.1\.7",')
-        self.assertRegex(manifest, r'(?m)^tinybus-module = "0\.1\.7"$')
+        self.assertRegex(manifest, r'(?m)^tinybus = \{ version = "0\.3\.2",')
+        self.assertRegex(manifest, r'(?m)^tinybus-module = "0\.3\.2"$')
         self.assertIn(
             '[patch.crates-io]\ntinybus = { path = "vendor/tinybus/crates/tinybus" }\n'
             'tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }',
@@ -169,7 +170,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
             text=True, capture_output=True, check=True,
         ).stdout.split()
         self.assertEqual(tree_entry[:2], ["160000", "commit"])
-        self.assertEqual(tree_entry[2], "ed1ee4f5ee561c0320fa715eef114e0f1b888e41")
+        self.assertEqual(tree_entry[2], "cba2de0e573f99fe4c7e45ba14e2d6b5a2a7757f")
+        proof_manifest = (ROOT / "proof-workspaces/storage-needs/Cargo.toml").read_text()
+        self.assertIn(
+            'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
+            'rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }',
+            proof_manifest,
+        )
+        self.assertNotRegex(proof_manifest, r"(?m)^tinybus(?:-module)?\s*=")
 
     def test_python_release_contract_job_checks_out_source_with_read_only_access(self):
         ci = CI_WORKFLOW.read_text()
