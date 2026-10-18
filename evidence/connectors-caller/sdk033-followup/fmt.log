@@ -1,0 +1,1 @@
+[ci-cancel-aware] exec: cargo fmt --all -- --check 
