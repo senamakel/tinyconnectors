@@ -1,0 +1,5 @@
+[ci-cancel-aware] exec: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings 
+    Checking tinyconnectors-bus v0.20.2 (/Users/enamakel/work/workflow-openhuman/worktrees/epic-8056-connectors-storage-needs/openhuman/vendor/tinyconnectors/crates/tinyconnectors-bus)
+    Checking tinyconnectors-sync v0.20.2 (/Users/enamakel/work/workflow-openhuman/worktrees/epic-8056-connectors-storage-needs/openhuman/vendor/tinyconnectors/crates/tinyconnectors-sync)
+    Checking tinyconnectors v0.20.2 (/Users/enamakel/work/workflow-openhuman/worktrees/epic-8056-connectors-storage-needs/openhuman/vendor/tinyconnectors/crates/tinyconnectors)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 21.83s
