@@ -14,7 +14,7 @@ EXPECTED_SOURCE = (
     "?rev=c9ea6ff1615b77b55d7269403af5fd11bedc9ce8"
     "#c9ea6ff1615b77b55d7269403af5fd11bedc9ce8"
 )
-EXPECTED_CONTRACT_VERSION = "0.20.1"
+EXPECTED_CONTRACT_VERSION = "0.20.2"
 EXPECTED_STORAGE_BUS_VERSION = "1.5.0"
 EXPECTED_STORAGE_NEEDS_CRATE = "tinystoragedrivers-bus"
 EXPECTED_PROOF_PACKAGE = "tinyconnectors-storage-needs-consumer-proof"
