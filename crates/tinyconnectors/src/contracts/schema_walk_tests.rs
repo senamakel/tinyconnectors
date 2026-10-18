@@ -44,5 +44,5 @@ fn response_fields_are_sorted_and_ignore_schema_keywords() {
 #[test]
 fn response_fields_do_not_expose_json_schema_metadata() {
     let schema = json!({"type": "object", "$id": "urn:example", "$defs": {"item": {}}});
-    assert!(response_fields_from_schema(Some(&schema)).is_empty());
+    assert_eq!(response_fields_from_schema(Some(&schema)), Vec::new());
 }

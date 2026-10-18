@@ -8,7 +8,7 @@ use super::*;
 
 #[test]
 fn todoist_catalog_is_non_empty_and_unique() {
-    assert!(!TODOIST_CURATED.is_empty());
+    assert_ne!(TODOIST_CURATED, &[] as &[CuratedTool]);
     let mut slugs: Vec<&'static str> = TODOIST_CURATED.iter().map(|t| t.slug).collect();
     slugs.sort_unstable();
     slugs.dedup();

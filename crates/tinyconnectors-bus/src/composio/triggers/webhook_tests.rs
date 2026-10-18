@@ -320,7 +320,7 @@ fn a_v2_delivery_may_name_its_trigger_id_directly() {
 
     assert_eq!(event.metadata.trigger_id, "ti_3");
     assert_eq!(event.metadata.connected_account_id, "ca_3");
-    assert!(event.metadata.uuid.is_empty());
+    assert_eq!(event.metadata.uuid, "");
 }
 
 #[test]

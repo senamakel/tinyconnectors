@@ -335,7 +335,7 @@ async fn an_empty_backend_allowlist_is_an_empty_overview() {
         .connected_integrations(ComposioConnectedIntegrationsMode::Backend)
         .await
         .unwrap();
-    assert!(overview.is_empty());
+    assert_eq!(overview, Vec::new());
     assert_eq!(count(&seen, "/connections"), 0);
 }
 
@@ -383,7 +383,7 @@ async fn the_direct_overview_uses_the_active_connections_as_the_allowlist() {
     let slugs: Vec<_> = overview.iter().map(|i| i.toolkit.as_str()).collect();
     assert_eq!(slugs, ["gmail", "notion"], "inactive slack is not listed");
     assert_eq!(overview[0].tools[0].name, "GMAIL_FETCH_EMAILS");
-    assert!(overview[1].tools.is_empty());
+    assert_eq!(overview[1].tools, Vec::new());
     assert_eq!(
         overview[0].description,
         tinyconnectors_sync::toolkits::catalog::toolkit_description("gmail"),
@@ -411,12 +411,12 @@ async fn a_direct_tool_listing_failure_only_costs_the_tools() {
 #[tokio::test]
 async fn a_direct_tenant_with_no_active_connections_is_an_empty_overview() {
     let (service, _) = direct_service(|_| ok(r#"{"items":[]}"#));
-    assert!(
+    assert_eq!(
         service
             .connected_integrations(ComposioConnectedIntegrationsMode::Direct)
             .await
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        Vec::new()
     );
 }
 

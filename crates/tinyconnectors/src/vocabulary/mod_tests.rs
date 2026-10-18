@@ -111,7 +111,7 @@ fn unknown_toolkits_retain_fallback_descriptions_without_a_catalog() {
     });
     assert!(response.toolkits[0].actions.is_none());
     assert!(!response.toolkits[0].native_provider);
-    assert!(!response.toolkits[0].description.is_empty());
+    assert_ne!(response.toolkits[0].description, "");
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn identity_metadata_is_computed_by_the_module() {
     assert!((response.values[0].confidence - 0.95).abs() < f64::EPSILON);
     assert!(response.values[0].matchable);
     assert_eq!(response.connection_identifiers, ["conn"]);
-    assert!(response.prompt_section.is_empty());
+    assert_eq!(response.prompt_section, "");
 }
 
 #[test]
@@ -310,14 +310,14 @@ fn curated_catalog_for_an_uncurated_toolkit_is_empty() {
     let listed = list_curated_catalog(CuratedCatalogRequest {
         toolkit: Some("definitely-not-a-toolkit".into()),
     });
-    assert!(listed.is_empty());
+    assert_eq!(listed, Vec::new());
 }
 
 #[test]
 fn visible_tools_follow_the_scope_preference() {
     let default = list_visible_tools("gmail", UserScopePref::default());
     assert!(default.has_catalog);
-    assert!(!default.tools.is_empty());
+    assert_ne!(default.tools, Vec::new());
     assert!(default.tools.iter().all(|t| t.scope != ToolScope::Admin));
     assert!(default.tools.iter().any(|t| t.scope == ToolScope::Write));
 
@@ -353,5 +353,5 @@ fn visible_tools_follow_the_scope_preference() {
 fn visible_tools_for_an_uncurated_toolkit_pass_through() {
     let listed = list_visible_tools("not-a-toolkit", UserScopePref::default());
     assert!(!listed.has_catalog);
-    assert!(listed.tools.is_empty());
+    assert_eq!(listed.tools, Vec::new());
 }

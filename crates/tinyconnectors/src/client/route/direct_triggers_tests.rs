@@ -633,7 +633,7 @@ async fn still_refuses_the_github_repository_listing() {
             member: "ListGithubRepos"
         }
     ));
-    assert!(transport.requests().is_empty());
+    assert_eq!(transport.requests(), Vec::new());
 }
 
 #[tokio::test]

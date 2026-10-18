@@ -79,7 +79,7 @@ async fn restricted_static_capabilities_need_no_route_or_state() {
         capabilities.capabilities.is_empty(),
         "restricted mode has no native provider or execution capabilities"
     );
-    assert!(!ready.toolkits.is_empty());
+    assert_ne!(ready.toolkits, Vec::new());
 }
 
 #[cfg(feature = "static-link")]

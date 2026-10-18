@@ -673,6 +673,11 @@ impl ConnectorService {
         clippy::unused_async,
         reason = "TinyBus interface signatures are async; this operation performs synchronous in-memory work"
     )]
+    #[allow(
+        unknown_lints,
+        clippy::unused_async_trait_impl,
+        reason = "TinyBus interface methods must keep their async signature"
+    )]
     async fn prepare_arguments(
         &self,
         request: PrepareArgumentsRequest,
@@ -684,6 +689,11 @@ impl ConnectorService {
     #[allow(
         clippy::unused_async,
         reason = "TinyBus interface signatures are async; this operation performs synchronous in-memory work"
+    )]
+    #[allow(
+        unknown_lints,
+        clippy::unused_async_trait_impl,
+        reason = "TinyBus interface methods must keep their async signature"
     )]
     async fn filter_response(
         &self,
@@ -700,6 +710,11 @@ impl ConnectorService {
     #[allow(
         clippy::unused_async,
         reason = "TinyBus interface signatures are async; this operation performs synchronous in-memory work"
+    )]
+    #[allow(
+        unknown_lints,
+        clippy::unused_async_trait_impl,
+        reason = "TinyBus interface methods must keep their async signature"
     )]
     async fn classify_error(&self, request: ClassifyErrorRequest) -> TinyBusResult<ProviderError> {
         Ok(processing::classified(&request.tool, &request.message))
@@ -750,6 +765,11 @@ impl ConnectorService {
     #[allow(
         clippy::unused_async,
         reason = "TinyBus interface signatures are async; this operation performs synchronous in-memory work"
+    )]
+    #[allow(
+        unknown_lints,
+        clippy::unused_async_trait_impl,
+        reason = "TinyBus interface methods must keep their async signature"
     )]
     async fn close_archive(&self, handle: tinyconnectors_bus::ArchiveHandle) -> TinyBusResult<()> {
         self.archives.close(&handle)
@@ -1078,6 +1098,11 @@ impl ConnectorService {
     #[allow(
         clippy::unused_async,
         reason = "TinyBus methods are async; mode is immutable"
+    )]
+    #[allow(
+        unknown_lints,
+        clippy::unused_async_trait_impl,
+        reason = "TinyBus interface methods must keep their async signature"
     )]
     async fn runtime_mode(&self) -> TinyBusResult<tinyconnectors_bus::ComposioRuntimeModeResponse> {
         Ok(tinyconnectors_bus::ComposioRuntimeModeResponse {
