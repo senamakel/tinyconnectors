@@ -39,8 +39,8 @@ tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedri
 # answered from what the registered providers know. It stays a separate crate so
 # it keeps its own dependency rules — no transport, no storage engine.
 tinyconnectors-sync = { path = "crates/tinyconnectors-sync" }
-# TinyBus 0.3.2 is the first SDK line accepted by the host's native module
-# loader. Socket and CLI features are unnecessary here.
+# TinyBus 0.3.2 matches the published SDK selected for the host native module
+# runtime. Socket and CLI features are unnecessary here.
 tinybus = { version = "0.3.2", default-features = false, features = [
     "macros",
     "modules",
