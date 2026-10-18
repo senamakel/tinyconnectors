@@ -147,14 +147,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_release_dependencies_match_the_published_bus_and_sdk_sources(self):
         manifest = (ROOT / "Cargo.toml").read_text()
-        self.assertIn('version = "0.20.1"', manifest)
+        self.assertIn('version = "0.20.2"', manifest)
         self.assertIn(
             'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
             'rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }',
             manifest,
         )
-        self.assertRegex(manifest, r'(?m)^tinybus = \{ version = "0\.3\.2",')
-        self.assertRegex(manifest, r'(?m)^tinybus-module = "0\.3\.2"$')
+        self.assertRegex(manifest, r'(?m)^tinybus = \{ version = "0\.3\.3",')
+        self.assertRegex(manifest, r'(?m)^tinybus-module = "0\.3\.3"$')
         self.assertIn(
             '[patch.crates-io]\ntinybus = { path = "vendor/tinybus/crates/tinybus" }\n'
             'tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }',
@@ -170,7 +170,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
             text=True, capture_output=True, check=True,
         ).stdout.split()
         self.assertEqual(tree_entry[:2], ["160000", "commit"])
-        self.assertEqual(tree_entry[2], "cba2de0e573f99fe4c7e45ba14e2d6b5a2a7757f")
+        self.assertEqual(tree_entry[2], "207a9a7df15e44fdba00a807d0f7eaf21904ba0e")
         proof_manifest = (ROOT / "proof-workspaces/storage-needs/Cargo.toml").read_text()
         self.assertIn(
             'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
