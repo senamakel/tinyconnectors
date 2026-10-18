@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github/workflows/release.yml"
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
-REVIEWED_RELEASE_PIN = "1e28317c435a9c714002199e65d18a1067fa5777"
+REVIEWED_RELEASE_PIN = "6ed83b04aab2d8977ec62e966cb914531e534fa4"
 LEGACY_RELEASE_PIN = "4adc1080fb495098e7af1aade82ed7e6e3c69bb7"
 
 
