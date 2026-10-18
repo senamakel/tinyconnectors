@@ -45,7 +45,7 @@ fn separators_and_case_do_not_change_the_toolkit() {
 #[test]
 fn a_missing_field_reads_as_empty() -> serde_json::Result<()> {
     let policy: OfferedToolkits = serde_json::from_str(r#"{"deny":["slack"]}"#)?;
-    assert!(policy.allow.is_empty());
+    assert_eq!(policy.allow, Vec::<String>::new());
     assert_eq!(policy.deny, ["slack"]);
     Ok(())
 }

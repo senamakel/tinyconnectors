@@ -71,9 +71,9 @@ fn a_missing_output_schema_stays_unknown_rather_than_empty() {
     );
     let c = &contracts[0];
     assert!(c.output_schema.is_none());
-    assert!(c.output_fields.is_empty());
+    assert_eq!(c.output_fields, Vec::<String>::new());
     assert!(c.primary_array_path.is_none());
-    assert!(c.required_args.is_empty());
+    assert_eq!(c.required_args, Vec::<String>::new());
 }
 
 #[test]

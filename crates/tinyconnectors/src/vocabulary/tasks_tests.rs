@@ -110,7 +110,7 @@ fn a_normalized_task_decodes_from_the_minimum_an_older_peer_wrote() {
     assert_eq!(back.external_id, "1");
     assert_eq!(back.source_id, "");
     assert_eq!(back.kind, TaskKind::Generic);
-    assert!(back.labels.is_empty());
+    assert_eq!(back.labels, Vec::<String>::new());
 }
 
 #[test]

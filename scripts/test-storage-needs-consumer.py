@@ -19,7 +19,7 @@ from storage_needs_consumer import (  # noqa: E402
 
 FAKE_CARGO = ROOT / "scripts/test-support/fake-storage-needs-cargo.py"
 ROOT_ID = "path+file:///fixture/storage-needs#tinyconnectors-storage-needs-consumer-proof@0.0.0"
-BUS_ID = "path+file:///fixture/crates/tinyconnectors-bus#tinyconnectors-bus@0.20.0"
+BUS_ID = "path+file:///fixture/crates/tinyconnectors-bus#tinyconnectors-bus@0.20.1"
 TSD_ID = (
     "git+https://github.com/tinyhumansai/tinystoragedrivers"
     "?rev=c9ea6ff1615b77b55d7269403af5fd11bedc9ce8"
@@ -37,7 +37,7 @@ def good_metadata():
     return {
         "packages": [
             {"id": ROOT_ID, "name": "tinyconnectors-storage-needs-consumer-proof", "version": "0.0.0", "source": None},
-            {"id": BUS_ID, "name": "tinyconnectors-bus", "version": "0.20.0", "source": None},
+            {"id": BUS_ID, "name": "tinyconnectors-bus", "version": "0.20.1", "source": None},
             {"id": TSD_ID, "name": "tinystoragedrivers-bus", "version": "1.5.0", "source": EXPECTED_SOURCE},
             {"id": SERDE_ID, "name": "serde", "version": "1.0.229", "source": "registry+https://github.com/rust-lang/crates.io-index"},
             {"id": SERDE_JSON_ID, "name": "serde_json", "version": "1.0.154", "source": "registry+https://github.com/rust-lang/crates.io-index"},
@@ -67,7 +67,7 @@ def good_tree():
     return "\n".join(
         [
             "tinyconnectors-storage-needs-consumer-proof v0.0.0 (/fixture/storage-needs)",
-            "tinyconnectors-bus v0.20.0 (/fixture/crates/tinyconnectors-bus)",
+            "tinyconnectors-bus v0.20.1 (/fixture/crates/tinyconnectors-bus)",
             "tinystoragedrivers-bus v1.5.0 (https://github.com/tinyhumansai/tinystoragedrivers?rev=c9ea6ff1615b77b55d7269403af5fd11bedc9ce8#c9ea6ff1)",
             "serde v1.0.229",
             "serde_json v1.0.154",
@@ -114,9 +114,9 @@ class StorageNeedsConsumerTests(unittest.TestCase):
 
     def test_rejects_tinyconnectors_implementation_dependency(self):
         metadata = good_metadata()
-        add_dependency(metadata, "path#tinyconnectors@0.20.0", "tinyconnectors")
+        add_dependency(metadata, "path#tinyconnectors@0.20.1", "tinyconnectors")
         with self.assertRaisesRegex(ProofError, "forbidden packages: tinyconnectors"):
-            validate_consumer_graph(metadata, good_tree() + "tinyconnectors v0.20.0\n")
+            validate_consumer_graph(metadata, good_tree() + "tinyconnectors v0.20.1\n")
 
     def test_rejects_async_runtime_dependency(self):
         metadata = good_metadata()

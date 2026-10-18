@@ -163,12 +163,12 @@ async fn declared_storage_needs_cover_every_persisted_resource() {
     assert_eq!(needs.collections.len(), 1);
     let collection = &needs.collections[0];
     assert_eq!(collection.name, PREFS_NAMESPACE);
-    assert!(collection.indexes.is_empty());
+    assert_eq!(collection.indexes, Vec::new());
     assert!(collection.ttl_field.is_none());
     assert!(collection.search.is_none());
-    assert!(needs.blob_prefixes.is_empty());
+    assert_eq!(needs.blob_prefixes, &[] as &[&str]);
     assert_eq!(needs.stream_prefixes, &["triggers/"]);
-    assert!(needs.secret_prefixes.is_empty());
+    assert_eq!(needs.secret_prefixes, &[] as &[&str]);
 
     let storage = scoped("declared-needs");
     let documents = storage.documents().clone();

@@ -137,7 +137,7 @@ fn a_prefix_never_claims_a_longer_toolkits_actions() {
         &[tool("GITHUB_LIST_ISSUES")],
         &HashMap::new(),
     );
-    assert!(out[0].tools.is_empty());
+    assert_eq!(out[0].tools, Vec::new());
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn a_hidden_curated_action_is_gated_with_its_scope_and_an_uncurated_one_is_dropp
         ],
         &HashMap::new(),
     );
-    assert!(out[0].tools.is_empty());
+    assert_eq!(out[0].tools, Vec::new());
     assert_eq!(out[0].gated_tools.len(), 1);
     assert_eq!(out[0].gated_tools[0].name, "GMAIL_DELETE_MESSAGE");
     assert_eq!(out[0].gated_tools[0].required_scope, ToolScope::Admin);
@@ -176,7 +176,7 @@ fn the_stored_preference_moves_an_action_from_gated_to_callable() {
         &preferences,
     );
     assert_eq!(out[0].tools.len(), 1);
-    assert!(out[0].gated_tools.is_empty());
+    assert_eq!(out[0].gated_tools, Vec::new());
 }
 
 #[test]

@@ -248,8 +248,8 @@ fn trigger_metadata_from_before_1_22_still_decodes_and_keeps_its_wire_form() {
     // `id` and `uuid`; re-serializing it must not grow empty keys.
     let wire = json!({ "id": "evt-1", "uuid": "uuid-1" });
     let metadata: ComposioTriggerMetadata = serde_json::from_value(wire.clone()).expect("parses");
-    assert!(metadata.user_id.is_empty());
-    assert!(metadata.connected_account_id.is_empty());
-    assert!(metadata.trigger_id.is_empty());
+    assert_eq!(metadata.user_id, "");
+    assert_eq!(metadata.connected_account_id, "");
+    assert_eq!(metadata.trigger_id, "");
     assert_eq!(serde_json::to_value(&metadata).expect("serializes"), wire);
 }

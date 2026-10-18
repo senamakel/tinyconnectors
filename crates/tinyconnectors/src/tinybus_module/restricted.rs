@@ -23,6 +23,11 @@ impl RestrictedService {
         clippy::unused_async,
         reason = "TinyBus signatures are async; mode is immutable"
     )]
+    #[allow(
+        unknown_lints,
+        clippy::unused_async_trait_impl,
+        reason = "TinyBus interface methods must keep their async signature"
+    )]
     async fn runtime_mode(&self) -> TinyBusResult<ComposioRuntimeModeResponse> {
         Ok(ComposioRuntimeModeResponse {
             mode: ComposioRuntimeMode::RoutedReadOnly,
@@ -34,6 +39,11 @@ impl RestrictedService {
         clippy::unused_async,
         reason = "TinyBus signatures are async; static registry only"
     )]
+    #[allow(
+        unknown_lints,
+        clippy::unused_async_trait_impl,
+        reason = "TinyBus interface methods must keep their async signature"
+    )]
     /// Report no native provider capabilities for a restricted instance.
     async fn list_capabilities(&self) -> TinyBusResult<ComposioCapabilitiesResponse> {
         // No native provider methods are available in this instance.
@@ -44,6 +54,11 @@ impl RestrictedService {
     #[allow(
         clippy::unused_async,
         reason = "TinyBus signatures are async; static registry only"
+    )]
+    #[allow(
+        unknown_lints,
+        clippy::unused_async_trait_impl,
+        reason = "TinyBus interface methods must keep their async signature"
     )]
     /// Return the static compiled toolkit catalog without reading preferences.
     async fn list_agent_ready_toolkits(&self) -> TinyBusResult<ComposioAgentReadyToolkitsResponse> {

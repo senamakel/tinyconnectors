@@ -8,7 +8,7 @@ use super::*;
 
 #[test]
 fn one_drive_catalog_is_non_empty_and_unique() {
-    assert!(!ONE_DRIVE_CURATED.is_empty());
+    assert_ne!(ONE_DRIVE_CURATED, &[] as &[CuratedTool]);
     let mut slugs: Vec<&'static str> = ONE_DRIVE_CURATED.iter().map(|t| t.slug).collect();
     slugs.sort_unstable();
     slugs.dedup();
@@ -20,7 +20,7 @@ fn one_drive_catalog_is_non_empty_and_unique() {
 
 #[test]
 fn excel_catalog_is_non_empty_and_unique() {
-    assert!(!EXCEL_CURATED.is_empty());
+    assert_ne!(EXCEL_CURATED, &[] as &[CuratedTool]);
     let mut slugs: Vec<&'static str> = EXCEL_CURATED.iter().map(|t| t.slug).collect();
     slugs.sort_unstable();
     slugs.dedup();
