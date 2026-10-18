@@ -255,3 +255,11 @@
    Compiling chrono v0.4.45
    Compiling rustls-platform-verifier v0.7.1
    Compiling ureq v3.4.1
+   Compiling tinystoragedrivers-bus v0.11.0 (https://github.com/tinyhumansai/tinystoragedrivers?tag=v0.11.0#9eeef54a)
+   Compiling tinybus-module v0.3.3 (/Users/enamakel/work/workflow-openhuman/worktrees/epic-8056-connectors-storage-needs/openhuman/vendor/tinyconnectors/vendor/tinybus/crates/tinybus-module)
+   Compiling tinystoragedrivers-client v0.11.0 (https://github.com/tinyhumansai/tinystoragedrivers?tag=v0.11.0#9eeef54a)
+   Compiling tinystoragedrivers-busproxy v0.11.0 (https://github.com/tinyhumansai/tinystoragedrivers?tag=v0.11.0#9eeef54a)
+   Compiling tinyconnectors v0.20.2 (/Users/enamakel/work/workflow-openhuman/worktrees/epic-8056-connectors-storage-needs/openhuman/vendor/tinyconnectors/crates/tinyconnectors)
+    Finished `release` profile [optimized] target(s) in 2m 35s
+     Running `target/release/examples/verify_module /Users/enamakel/.cache/tinyconnectors-verify-730LYk/libtinyconnectors.dylib`
+verified /Users/enamakel/.cache/tinyconnectors-verify-730LYk/libtinyconnectors.dylib as TinyBus module `tinyconnectors`
