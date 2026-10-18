@@ -6,7 +6,6 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use base64::Engine as _;
 use hmac::{Hmac, Mac};
 use serde_json::json;
 use sha2::Sha256;
