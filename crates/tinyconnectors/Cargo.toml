@@ -65,6 +65,7 @@ tinystoragedrivers-core = { workspace = true }
 # provides.
 tinystoragedrivers-busproxy = { workspace = true, optional = true }
 tinystoragedrivers-tinybus = { workspace = true, optional = true }
+tinystoragedrivers-client = { workspace = true, optional = true }
 # Daily rotation of the trigger archive needs a civil date.
 chrono = { workspace = true }
 
@@ -98,7 +99,7 @@ required-features = ["module"]
 # `default-features = false`.
 default = ["module"]
 # The TinyBus module adapter and its ABI exports (`src/tinybus_module/`).
-module = ["dep:tinybus", "dep:tinybus-module", "dep:tinystoragedrivers-busproxy", "dep:tinystoragedrivers-tinybus"]
+module = ["dep:tinybus", "dep:tinybus-module", "dep:tinystoragedrivers-busproxy", "dep:tinystoragedrivers-client", "dep:tinystoragedrivers-tinybus"]
 linked = ["static-link"]
 # Link the TinyBus module into a host binary with Rust-addressable entry points.
 static-link = ["module"]

@@ -167,6 +167,8 @@ pub(crate) struct ModuleConfig {
     runtime_mode: tinyconnectors_bus::ComposioRuntimeMode,
     /// The toolkits the host offers its agent. Applied to listings only.
     offered: tinyconnectors_bus::vocabulary::OfferedToolkits,
+    /// Host-issued route for this module instance's governed storage lease.
+    storage_descriptor: Option<tinystoragedrivers_busproxy::StorageDescriptor>,
 }
 
 impl<'de> Deserialize<'de> for ModuleConfig {
@@ -196,6 +198,13 @@ impl<'de> Deserialize<'de> for ModuleConfig {
             .transpose()
             .map_err(serde::de::Error::custom)?
             .unwrap_or_default();
+        let storage_descriptor = value
+            .get("storage_descriptor")
+            .cloned()
+            .filter(|descriptor| !descriptor.is_null())
+            .map(serde_json::from_value::<tinystoragedrivers_busproxy::StorageDescriptor>)
+            .transpose()
+            .map_err(serde::de::Error::custom)?;
         let route = if value.get("route").is_none_or(serde_json::Value::is_null) {
             None
         } else {
@@ -212,6 +221,7 @@ impl<'de> Deserialize<'de> for ModuleConfig {
             route,
             runtime_mode,
             offered,
+            storage_descriptor,
         })
     }
 }
@@ -1162,14 +1172,25 @@ fn to_bus_error(error: &crate::Error) -> tinybus::Error {
 }
 
 async fn setup(connection: Connection, config: ModuleConfig) -> TinyBusResult<()> {
+    let storage = storage::StorageLink::new(connection.clone(), config.storage_descriptor.clone());
+    storage
+        .prepare_if_bound()
+        .await
+        .map_err(|_| tinybus::Error::failed("configured storage route is unavailable"))?;
+    setup_with_storage(connection, config, storage).await
+}
+
+async fn setup_with_storage(
+    connection: Connection,
+    config: ModuleConfig,
+    storage: storage::StorageLink,
+) -> TinyBusResult<()> {
     if config.runtime_mode == tinyconnectors_bus::ComposioRuntimeMode::RoutedReadOnly {
         return restricted::setup(connection).await;
     }
 
     // `state_dir` is accepted for wire compatibility and unused: storage is
     // reached through the host's storage bus, scoped by the host.
-    let storage = storage::StorageLink::new(connection.clone());
-
     let offered = config.offered.clone();
     let route = config.into_route().map_err(|error| to_bus_error(&error))?;
     tracing::info!(
@@ -1205,8 +1226,14 @@ async fn setup_with_context(
     context: tinybus_module::ModuleSetupContext,
     config: ModuleConfig,
 ) -> TinyBusResult<()> {
+    let connection = context.connection().clone();
+    let storage = storage::StorageLink::new(connection.clone(), config.storage_descriptor.clone());
+    storage
+        .prepare_if_bound()
+        .await
+        .map_err(|_| tinybus::Error::failed("configured storage route is unavailable"))?;
     migration::setup(&context).await?;
-    setup(context.connection().clone(), config).await
+    setup_with_storage(connection, config, storage).await
 }
 
 type SetupFuture = std::pin::Pin<Box<dyn std::future::Future<Output = TinyBusResult<()>> + Send>>;

@@ -19,6 +19,8 @@ use tinystoragedrivers_core::{
     DocumentStore, Result as StorageResult, ScopedStorage, StorageBackend, StorageError,
     StreamStore,
 };
+use tinystoragedrivers_busproxy::{BusTransport, StorageDescriptor, module_scope_label};
+use tinystoragedrivers_client::{BusStorage, StorageTransport};
 use tokio::sync::Mutex;
 
 use crate::state::DocumentPrefsStore;
@@ -31,6 +33,7 @@ use crate::state::DocumentPrefsStore;
 #[derive(Clone)]
 pub(super) struct StorageLink {
     connection: Option<Connection>,
+    descriptor: Option<StorageDescriptor>,
     slot: Arc<Mutex<Option<ScopedStorage>>>,
 }
 
@@ -44,9 +47,10 @@ impl std::fmt::Debug for StorageLink {
 
 impl StorageLink {
     /// Reach the host's storage over `connection`.
-    pub(super) fn new(connection: Connection) -> Self {
+    pub(super) fn new(connection: Connection, descriptor: Option<StorageDescriptor>) -> Self {
         Self {
             connection: Some(connection),
+            descriptor,
             slot: Arc::default(),
         }
     }
@@ -56,8 +60,21 @@ impl StorageLink {
     pub(super) fn none() -> Self {
         Self {
             connection: None,
+            descriptor: None,
             slot: Arc::default(),
         }
+    }
+
+    /// Validate a supplied lease before the module replaces any served surface.
+    pub(super) async fn prepare_if_bound(&self) -> StorageResult<()> {
+        if self.descriptor.is_some() {
+            self.scoped().await?;
+        }
+        Ok(())
+    }
+
+    fn requires_storage(&self) -> bool {
+        self.descriptor.is_some()
     }
 
     async fn scoped(&self) -> StorageResult<ScopedStorage> {
@@ -69,7 +86,16 @@ impl StorageLink {
             return Ok(scoped.clone());
         }
         tracing::debug!("[connectors][storage] connecting to the host storage bus");
-        let bus = tinystoragedrivers_busproxy::connect_storage(connection.clone()).await?;
+        let bus = if let Some(descriptor) = self.descriptor.clone() {
+            let transport = BusTransport::connect_bound(connection.clone(), descriptor)
+                .await
+                .map_err(|error| StorageError::unavailable(error.to_string()))?;
+            BusStorage::connect(Arc::new(transport), module_scope_label())
+                .await
+                .map_err(|error| StorageError::unavailable(error.to_string()))?
+        } else {
+            tinystoragedrivers_busproxy::connect_storage(connection.clone()).await?
+        };
         let scoped = bus.for_scope(&tinystoragedrivers_busproxy::module_scope_label())?;
         *slot = Some(scoped.clone());
         Ok(scoped)
@@ -113,6 +139,12 @@ impl PrefsStore for LinkedPrefsStore {
         match self.link.documents().await {
             Ok(documents) => DocumentPrefsStore::new(documents).get(key).await,
             Err(error) => {
+                if self.link.requires_storage() {
+                    return Err(tinyconnectors_sync::Error::Store {
+                        key: key.to_owned(),
+                        message: "configured host storage lease is unavailable".to_owned(),
+                    });
+                }
                 tracing::warn!(%error, "[connectors][prefs] host storage unavailable; reading in-memory preferences");
                 self.fallback.get(key).await
             }
@@ -123,6 +155,12 @@ impl PrefsStore for LinkedPrefsStore {
         match self.link.documents().await {
             Ok(documents) => DocumentPrefsStore::new(documents).set(key, value).await,
             Err(error) => {
+                if self.link.requires_storage() {
+                    return Err(tinyconnectors_sync::Error::Store {
+                        key: key.to_owned(),
+                        message: "configured host storage lease is unavailable".to_owned(),
+                    });
+                }
                 tracing::warn!(%error, "[connectors][prefs] host storage unavailable; keeping preference in memory only");
                 self.fallback.set(key, value).await
             }
