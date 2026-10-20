@@ -99,8 +99,7 @@ async fn verify_migration_surface(
         schema::{MigrateOptions, Registry},
     };
     use tinystoragedrivers_tinybus::migration::{
-        EXCHANGE_MEMBER, MIGRATION_INTERFACE, MIGRATION_OBJECT_PATH, MigrationExchangeRequest,
-        MigrationModuleClient,
+        EXCHANGE_MEMBER, MIGRATION_INTERFACE, MIGRATION_OBJECT_PATH, MigrationModuleClient,
     };
 
     let bus = tinybus::transport::memory::MemoryBus::new();
@@ -152,8 +151,6 @@ async fn verify_migration_surface(
     {
         return Err(io::Error::other("plain migration discovery was accepted").into());
     }
-    let _ = MigrationExchangeRequest::Begin { request_len: 1 };
-
     // This unrelated primary service remains usable after denied migration
     // calls, and before the module connects to host storage.
     let connector = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
