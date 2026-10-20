@@ -14,10 +14,25 @@
 //! the ports only and never chooses a backend.
 
 mod document_store;
+mod preference;
+#[cfg(test)]
+mod storage_needs;
+mod storage_schema;
 
 pub use document_store::DocumentPrefsStore;
 pub use tinyconnectors_bus::{STORAGE_NEEDS, StorageNeeds};
+// Schema execution and schema-derived grant calculation belong to this crate;
+// the bus carries only the names and the plain grant type.
+pub(crate) use preference::{decode_preference, encode_preference};
+#[cfg(test)]
+pub(crate) use storage_needs::storage_needs;
+pub use storage_schema::storage_schema;
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod test;
+
+#[cfg(test)]
+#[path = "migrated_reads_tests.rs"]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod migrated_reads;

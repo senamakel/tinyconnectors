@@ -2,11 +2,12 @@
 
 use std::sync::LazyLock;
 
+use super::storage::{PREFS_NAMESPACE, STREAM_PREFIX};
 use tinystoragedrivers_bus::{CollectionSpec, StorageNeeds};
 
 static PREFERENCE_COLLECTIONS: LazyLock<[CollectionSpec; 1]> = LazyLock::new(|| {
     [CollectionSpec {
-        name: "composio-user-scopes".into(),
+        name: PREFS_NAMESPACE.into(),
         indexes: Vec::new(),
         ttl_field: None,
         search: None,
@@ -14,7 +15,7 @@ static PREFERENCE_COLLECTIONS: LazyLock<[CollectionSpec; 1]> = LazyLock::new(|| 
 });
 
 static BLOB_PREFIXES: [&str; 0] = [];
-static STREAM_PREFIXES: [&str; 1] = ["triggers/"];
+static STREAM_PREFIXES: [&str; 1] = [STREAM_PREFIX];
 static SECRET_PREFIXES: [&str; 0] = [];
 
 /// The module's requested storage resources; hosts decide the grant.

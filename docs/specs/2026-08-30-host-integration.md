@@ -94,9 +94,13 @@ constructing a client and start choosing a blob. `state_dir` is accepted and
 ignored: the module keeps its scope-preference store and the trigger archive in
 the host's storage, reached over the storage bus
 (`tinystoragedrivers-busproxy::connect_storage`), with the scope bound by the
-host from the authenticated caller and the grant in `STORAGE_NEEDS`. Without
-served storage, history is unavailable and preferences are ephemeral. Until the preference migration in section 6
-lands, the host still owns the user's actual preference.
+host from the authenticated caller. The bus `STORAGE_NEEDS` declaration names
+the current resources; schema callbacks and v1 conversion are owned by the
+TinyConnectors implementation. The released TSD API still needs a compiled-
+module migration exchange and a host adapter before adoption of the current
+grant. Without served storage, history is unavailable and preferences are
+ephemeral. Until the preference migration in section 6 lands, the host still
+owns the user's actual preference.
 
 The blob is also optional. A module loaded without one still answers the
 capability members, so a signed-out user is not locked out of the question

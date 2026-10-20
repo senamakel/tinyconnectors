@@ -4,9 +4,10 @@
 //! host fills in its own process is invisible here. The module instead calls the
 //! host's `Storage` objects through its `TinyBus` connection
 //! (`tinystoragedrivers_busproxy::connect_storage`), the same way every other
-//! storage-using module does. The host binds the scope from the authenticated
-//! caller and enforces the grant in [`crate::state::STORAGE_NEEDS`]; nothing
-//! here names a scope, a directory or a backend.
+//! storage-using module does. The host uses the data-only declaration
+//! [`tinyconnectors_bus::STORAGE_NEEDS`] as input to its grant policy and binds
+//! the selected scope to the authenticated caller; nothing here names a scope,
+//! a directory or a backend.
 
 use std::sync::Arc;
 

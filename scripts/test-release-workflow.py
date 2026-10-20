@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import tomllib
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -147,7 +148,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_release_dependencies_match_the_published_bus_and_sdk_sources(self):
         manifest = (ROOT / "Cargo.toml").read_text()
-        self.assertIn('version = "0.20.2"', manifest)
+        self.assertEqual(
+            tomllib.loads(manifest)["workspace"]["package"]["version"],
+            "0.21.0",
+        )
         self.assertIn(
             'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
             'rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }',

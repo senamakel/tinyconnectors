@@ -21,9 +21,13 @@ module shutdown drops the table. Hosts close the old user's lease when switching
 identity. Existing load-time `ListTriggerHistory` remains compatible. Records
 live in the host's tinystoragedrivers stream and document stores, reached over
 the storage bus (`tinystoragedrivers-busproxy::connect_storage`); the grant the
-host must give is `tinyconnectors::state::STORAGE_NEEDS` (collection
-`composio-user-scopes`, stream prefix `triggers/`); existing
-arities are unchanged.
+host requests through the data-only `STORAGE_NEEDS` contract: collection
+`connectors.user_scopes` and stream prefix `connectors.triggers/`. The v1-to-v2
+schema and migration callbacks live in the TinyConnectors implementation, not
+the bus contract. The released TSD API does not yet exchange those callbacks
+with a compiled module; publish that owner-side exchange before the host
+adapter adopts current-only grants. The module itself continues to read and
+write only current names; existing member arities are unchanged.
 
 The dynamic verifier exercises preparation and filtering with local payloads.
 Hosts must wait for a published compatible artifact with a verified digest

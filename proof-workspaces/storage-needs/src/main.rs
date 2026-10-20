@@ -10,13 +10,13 @@ fn main() {
     assert_eq!(
         collection,
         &CollectionSpec {
-            name: "composio-user-scopes".into(),
+            name: "connectors.user_scopes".into(),
             indexes: Vec::new(),
             ttl_field: None,
             search: None,
         }
     );
     assert!(needs.blob_prefixes.is_empty());
-    assert_eq!(needs.stream_prefixes, ["triggers/"]);
+    assert_eq!(needs.stream_prefixes, ["connectors.triggers/"]);
     assert!(needs.secret_prefixes.is_empty());
 }
