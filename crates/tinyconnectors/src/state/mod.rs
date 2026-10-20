@@ -27,6 +27,10 @@ pub(crate) use preference::{decode_preference, encode_preference};
 #[cfg(test)]
 pub(crate) use storage_needs::storage_needs;
 pub use storage_schema::storage_schema;
+pub(crate) use storage_schema::{
+    rename_trigger_stream, unwrap_user_scopes, TRIGGERS_OPERATION,
+    TRIGGERS_OPERATION_VERSION, USER_SCOPES_OPERATION, USER_SCOPES_OPERATION_VERSION,
+};
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]

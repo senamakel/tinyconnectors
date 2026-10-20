@@ -32,6 +32,7 @@
 //! guidance — because that is all a host will have to act on.
 
 mod contracts;
+mod migration;
 mod restricted;
 mod routed;
 
@@ -1200,13 +1201,26 @@ async fn setup(connection: Connection, config: ModuleConfig) -> TinyBusResult<()
     Ok(())
 }
 
+async fn setup_with_context(
+    context: tinybus_module::ModuleSetupContext,
+    config: ModuleConfig,
+) -> TinyBusResult<()> {
+    migration::setup(&context).await?;
+    setup(context.connection().clone(), config).await
+}
+
 type SetupFuture = std::pin::Pin<Box<dyn std::future::Future<Output = TinyBusResult<()>> + Send>>;
 
 /// Capture the first admitted mode for this ABI instance. `TinyBus` retains the
 /// same callback for reinitialization, so another instance has its own seal.
-fn setup_factory() -> impl Fn(Connection, ModuleConfig) -> SetupFuture + Send + Sync {
+fn setup_factory() -> impl Fn(
+    tinybus_module::ModuleSetupContext,
+    ModuleConfig,
+) -> SetupFuture
+       + Send
+       + Sync {
     let mode = Arc::new(tokio::sync::Mutex::new(None));
-    move |connection, config: ModuleConfig| {
+        move |context, config: ModuleConfig| {
         let mode = mode.clone();
         Box::pin(async move {
             let mut admitted = mode.lock().await;
@@ -1217,7 +1231,7 @@ fn setup_factory() -> impl Fn(Connection, ModuleConfig) -> SetupFuture + Send + 
             }
             *admitted = Some(config.runtime_mode);
             drop(admitted);
-            setup(connection, config).await
+                setup_with_context(context, config).await
         })
     }
 }
@@ -1239,10 +1253,13 @@ macro_rules! export_module {
 }
 
 export_module! {
-    setup_factory = setup_factory,
+    setup_factory_with_context = setup_factory,
     config = ModuleConfig,
     worker_threads = 1,
-    provides = ["ai.tinyhumans.connectors.Composio"],
+    provides = [
+        "ai.tinyhumans.connectors.Composio",
+        "org.tinystoragedrivers.Migration",
+    ],
     methods = [
         "Configure",
         "ListToolkits",
