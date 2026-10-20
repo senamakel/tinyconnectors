@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         verify_unselected_migration_fails_closed().await?;
         return Ok(());
     }
-    let (module_host, client, broker_task) = tinybus::test_support::start_bus().await?;
+    let (module_host, client, broker_task) = start_selected_bus().await?;
     let info = tinybus::test_support::admit_module(
         &module_host,
         "TINYCONNECTORS_TEST_MODULE",
@@ -264,8 +264,11 @@ async fn verify_restricted_surface(
     module: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let bus = tinybus::transport::memory::MemoryBus::new();
-    let broker = Broker::new();
+    let broker = Broker::new_restricted_module_control();
     let task = broker.clone().spawn(bus.clone());
+    let (host_transport, controller_transport) = MemoryTransport::pair();
+    broker.attach_module_controller(std::sync::Arc::new(host_transport))?;
+    let _controller = Connection::connect(Box::new(controller_transport)).await?;
     let host = ModuleHost::new(broker);
     host.load_file_with_config(
         module,
@@ -330,6 +333,23 @@ async fn verify_restricted_surface(
     }
     task.abort();
     Ok(())
+}
+
+async fn start_selected_bus() -> Result<
+    (
+        ModuleHost,
+        Connection,
+        tokio::task::JoinHandle<tinybus::Result<()>>,
+    ),
+    Box<dyn std::error::Error>,
+> {
+    let bus = tinybus::transport::memory::MemoryBus::new();
+    let broker = Broker::new_restricted_module_control();
+    let task = broker.clone().spawn(bus.clone());
+    let (host_transport, controller_transport) = MemoryTransport::pair();
+    broker.attach_module_controller(std::sync::Arc::new(host_transport))?;
+    let controller = Connection::connect(Box::new(controller_transport)).await?;
+    Ok((ModuleHost::new(broker), controller, task))
 }
 
 /// Wait until the module claims its bus name, then check that its manifest
