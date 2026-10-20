@@ -54,23 +54,6 @@ impl MigrationPayloadHandler for ConnectorMigration {
                     && request.version == USER_SCOPES_OPERATION_VERSION =>
             {
                 let result = unwrap_user_scopes(request.records)
-                    .map(|records| {
-                        records
-                            .into_iter()
-                            .map(|record| {
-                                let mut target =
-                                    tinystoragedrivers_tinybus::migration::TargetRecord::new(
-                                        record.collection,
-                                        record.id,
-                                        record.body,
-                                    );
-                                if let Some(created_ms) = record.created_ms {
-                                    target = target.created_ms(created_ms);
-                                }
-                                target
-                            })
-                            .collect()
-                    })
                     .map_err(|_| invalid_transform("connector preference record is invalid"));
                 MigrationPayloadReply::Documents(result)
             }
