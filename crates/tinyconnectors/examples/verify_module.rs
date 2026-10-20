@@ -392,6 +392,26 @@ async fn verify_served_surface(
     client: &Connection,
     info: &ModuleInfo,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let provided: Vec<&str> = info
+        .manifest
+        .provides
+        .iter()
+        .map(|interface| interface.version.interface.as_str())
+        .collect();
+    if provided != [names::INTERFACE, MIGRATION_INTERFACE] {
+        return Err(io::Error::other(format!(
+            "module provides {provided:?} instead of the connector interface followed by migration"
+        ))
+        .into());
+    }
+    if info
+        .manifest
+        .provides
+        .get(1)
+        .is_none_or(|migration| !migration.methods.is_empty())
+    {
+        return Err(io::Error::other("migration members leaked into the secondary interface").into());
+    }
     let declared: Vec<String> = info
         .manifest
         .provides
