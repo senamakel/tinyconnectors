@@ -1305,9 +1305,8 @@ async fn scope_preferences_persist_in_the_hosts_documents_across_instances() -> 
     drop(first);
     // A second instance, over a fresh connection to the same host, sees it.
     let second = Connection::connect(bus.connect().await?).await?;
-    let store = super::storage::LinkedPrefsStore::new(super::storage::StorageLink::new(
-        second, None,
-    ));
+    let store =
+        super::storage::LinkedPrefsStore::new(super::storage::StorageLink::new(second, None));
     let reread = tinyconnectors_sync::UserScopePref::load(&store, "gmail")
         .await
         .expect("loads");
