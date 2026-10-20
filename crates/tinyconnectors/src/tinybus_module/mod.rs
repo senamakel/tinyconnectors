@@ -1213,14 +1213,10 @@ type SetupFuture = std::pin::Pin<Box<dyn std::future::Future<Output = TinyBusRes
 
 /// Capture the first admitted mode for this ABI instance. `TinyBus` retains the
 /// same callback for reinitialization, so another instance has its own seal.
-fn setup_factory() -> impl Fn(
-    tinybus_module::ModuleSetupContext,
-    ModuleConfig,
-) -> SetupFuture
-       + Send
-       + Sync {
+fn setup_factory()
+-> impl Fn(tinybus_module::ModuleSetupContext, ModuleConfig) -> SetupFuture + Send + Sync {
     let mode = Arc::new(tokio::sync::Mutex::new(None));
-        move |context, config: ModuleConfig| {
+    move |context, config: ModuleConfig| {
         let mode = mode.clone();
         Box::pin(async move {
             let mut admitted = mode.lock().await;
@@ -1231,7 +1227,7 @@ fn setup_factory() -> impl Fn(
             }
             *admitted = Some(config.runtime_mode);
             drop(admitted);
-                setup_with_context(context, config).await
+            setup_with_context(context, config).await
         })
     }
 }

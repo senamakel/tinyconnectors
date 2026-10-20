@@ -108,7 +108,10 @@ pub(super) fn unwrap_user_scopes(batch: Vec<SourceRecord>) -> Result<Vec<TargetR
 /// Step `triggers_rename`: `triggers/<day>` becomes `connectors.triggers/<day>`.
 /// A stream that is not under the v1 prefix is dropped, which the runner
 /// never asks for. Entries already have the v2 shape.
-pub(super) fn rename_trigger_stream(source: &str, entries: Vec<Value>) -> Option<(String, Vec<Value>)> {
+pub(super) fn rename_trigger_stream(
+    source: &str,
+    entries: Vec<Value>,
+) -> Option<(String, Vec<Value>)> {
     let day = source.strip_prefix(LEGACY_STREAM_PREFIX)?;
     Some((format!("{STREAM_PREFIX}{day}"), entries))
 }

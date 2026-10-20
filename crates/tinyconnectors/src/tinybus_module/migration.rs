@@ -21,10 +21,7 @@ fn declaration() -> tinybus::Result<SchemaDeclaration> {
             USER_SCOPES_OPERATION.to_owned(),
             USER_SCOPES_OPERATION_VERSION,
         )),
-        "triggers_rename" => Some((
-            TRIGGERS_OPERATION.to_owned(),
-            TRIGGERS_OPERATION_VERSION,
-        )),
+        "triggers_rename" => Some((TRIGGERS_OPERATION.to_owned(), TRIGGERS_OPERATION_VERSION)),
         _ => None,
     })
     .map_err(|_| tinybus::Error::failed("connector migration declaration is invalid"))
@@ -44,11 +41,12 @@ impl MigrationPayloadHandler for ConnectorMigration {
                         records
                             .into_iter()
                             .map(|record| {
-                                let mut target = tinystoragedrivers_tinybus::migration::TargetRecord::new(
-                                    record.collection,
-                                    record.id,
-                                    record.body,
-                                );
+                                let mut target =
+                                    tinystoragedrivers_tinybus::migration::TargetRecord::new(
+                                        record.collection,
+                                        record.id,
+                                        record.body,
+                                    );
                                 if let Some(created_ms) = record.created_ms {
                                     target = target.created_ms(created_ms);
                                 }
@@ -63,12 +61,12 @@ impl MigrationPayloadHandler for ConnectorMigration {
                 if request.operation == TRIGGERS_OPERATION
                     && request.version == TRIGGERS_OPERATION_VERSION =>
             {
-                let plan = rename_trigger_stream(&request.source, Vec::new()).map(
-                    |(target, _)| StreamPlan {
+                let plan = rename_trigger_stream(&request.source, Vec::new()).map(|(target, _)| {
+                    StreamPlan {
                         target,
                         mode: StreamMapMode::Identity,
-                    },
-                );
+                    }
+                });
                 MigrationPayloadReply::StreamPlan(Ok(plan))
             }
             MigrationPayload::Documents(request) => MigrationPayloadReply::Documents(Err(
