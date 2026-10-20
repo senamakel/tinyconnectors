@@ -328,23 +328,15 @@ async fn verify_current_storage_after_migration(
 
     let a_scopes = scopes_over(&proxy, "connectors-a-marker", true, false, true).await?;
     assert!(a_scopes.admin);
-    host.reinitialize(module_name, json!({"storage_descriptor": descriptor_b}))
-        .await?;
-    let b_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    let b_view = get_scopes(&b_proxy, "connectors-a-marker").await?;
-    assert!(b_view.read && b_view.write && !b_view.admin);
-    let b_scopes = scopes_over(&b_proxy, "connectors-b-marker", false, true, true).await?;
-    assert!(b_scopes.admin);
-
-    host.reinitialize(
+    verify_scope_isolation_between_profiles(
+        host,
         module_name,
+        json!({"storage_descriptor": descriptor_b.clone()}),
         json!({"storage_descriptor": descriptor_a.clone()}),
+        controller,
     )
     .await?;
     let a_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    assert!(get_scopes(&a_proxy, "connectors-a-marker").await?.admin);
-    let b_in_a = get_scopes(&a_proxy, "connectors-b-marker").await?;
-    assert!(b_in_a.read && b_in_a.write && !b_in_a.admin);
 
     if !registration.revoke(&lease_a).await {
         return Err(io::Error::other("profile A lease was not revoked").into());
@@ -427,6 +419,28 @@ async fn verify_migrated_scope_and_postlease_schema(
         )
         .into());
     }
+    Ok(())
+}
+
+async fn verify_scope_isolation_between_profiles(
+    host: &ModuleHost,
+    module_name: &str,
+    descriptor_b: serde_json::Value,
+    descriptor_a: serde_json::Value,
+    controller: &Connection,
+) -> VerifyResult<()> {
+    host.reinitialize(module_name, descriptor_b).await?;
+    let b_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let b_view = get_scopes(&b_proxy, "connectors-a-marker").await?;
+    assert!(b_view.read && b_view.write && !b_view.admin);
+    let b_scopes = scopes_over(&b_proxy, "connectors-b-marker", false, true, true).await?;
+    assert!(b_scopes.admin);
+
+    host.reinitialize(module_name, descriptor_a).await?;
+    let a_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    assert!(get_scopes(&a_proxy, "connectors-a-marker").await?.admin);
+    let b_in_a = get_scopes(&a_proxy, "connectors-b-marker").await?;
+    assert!(b_in_a.read && b_in_a.write && !b_in_a.admin);
     Ok(())
 }
 
