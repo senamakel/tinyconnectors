@@ -246,7 +246,7 @@ impl Environment<ConnectorStorageProfile> for ConnectorStorageEnvironment {
             .for_scope(&scope)
             .map_err(|_| HostFailure::Denied("storage-unavailable"))?;
         let grant = StorageGrant::from_needs(
-            (*tinyconnectors_bus::STORAGE_NEEDS).clone(),
+            *tinyconnectors_bus::STORAGE_NEEDS,
             &GrantPolicy {
                 writable: true,
                 ..GrantPolicy::default()
