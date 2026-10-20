@@ -20,7 +20,7 @@ use tinystoragedrivers_core::{
     StreamStore,
 };
 use tinystoragedrivers_busproxy::{BusTransport, StorageDescriptor, module_scope_label};
-use tinystoragedrivers_client::{BusStorage, StorageTransport};
+use tinystoragedrivers_client::BusStorage;
 use tokio::sync::Mutex;
 
 use crate::state::DocumentPrefsStore;

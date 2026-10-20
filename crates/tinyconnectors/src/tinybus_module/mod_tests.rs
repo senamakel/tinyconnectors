@@ -171,6 +171,86 @@ fn a_module_with_no_configuration_loads() {
     // signed-out user deciding what to connect needs.
     let config: ModuleConfig = serde_json::from_value(json!({})).expect("parses");
     assert!(config.into_route().expect("builds").is_none());
+    assert!(config.storage_descriptor.is_none());
+}
+
+#[test]
+fn the_module_config_accepts_only_a_typed_optional_storage_descriptor() {
+    let absent: ModuleConfig = serde_json::from_value(json!({})).expect("parses");
+    let null: ModuleConfig = serde_json::from_value(json!({"storage_descriptor": null}))
+        .expect("null keeps the compatibility behavior");
+    assert!(absent.storage_descriptor.is_none());
+    assert!(null.storage_descriptor.is_none());
+
+    for descriptor in [json!(17), json!({"service_peer": "not-a-peer"})] {
+        assert!(
+            serde_json::from_value::<ModuleConfig>(json!({"storage_descriptor": descriptor}))
+                .is_err()
+        );
+    }
+}
+
+#[tokio::test]
+async fn an_invalid_bound_descriptor_fails_before_replacing_the_live_service() -> tinybus::Result<()>
+{
+    let bus = MemoryBus::new();
+    Broker::new().spawn(bus.clone());
+    let serving = Connection::connect(bus.connect().await?).await?;
+    super::setup(serving.clone(), ModuleConfig::default()).await?;
+
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let before: ComposioCapabilitiesResponse =
+        proxy.call(names::methods::LIST_CAPABILITIES, ()).await?;
+
+    let invalid: ModuleConfig = serde_json::from_value(json!({
+        "storage_descriptor": {
+            "service_peer": ":1.999999",
+            "registration_id": 1,
+            "object_root": "/ai/tinyhumans/tinystorage/Leases/1"
+        }
+    }))
+    .expect("the descriptor has the expected wire shape");
+    let rejected = super::setup(serving, invalid).await;
+    if rejected.is_ok() {
+        return Err(tinybus::Error::failed(
+            "a descriptor for a disconnected storage service was accepted",
+        ));
+    }
+
+    let after: ComposioCapabilitiesResponse =
+        proxy.call(names::methods::LIST_CAPABILITIES, ()).await?;
+    assert_eq!(after.capabilities, before.capabilities);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_bound_storage_failure_does_not_fall_back_to_ephemeral_preferences() -> tinybus::Result<()>
+{
+    use tinyconnectors_sync::PrefsStore;
+
+    let bus = MemoryBus::new();
+    Broker::new().spawn(bus.clone());
+    let connection = Connection::connect(bus.connect().await?).await?;
+    let descriptor: tinystoragedrivers_busproxy::StorageDescriptor =
+        serde_json::from_value(json!({
+            "service_peer": ":1.999999",
+            "registration_id": 1,
+            "object_root": "/ai/tinyhumans/tinystorage/Leases/1"
+        }))
+        .expect("the descriptor has the expected wire shape");
+    let store = super::storage::LinkedPrefsStore::new(super::storage::StorageLink::new(
+        connection,
+        Some(descriptor),
+    ));
+
+    let result = store.get("gmail").await;
+    if result.is_ok() {
+        return Err(tinybus::Error::failed(
+            "an unavailable bound lease fell back to ephemeral preferences",
+        ));
+    }
+    Ok(())
 }
 
 #[tokio::test]
@@ -1225,7 +1305,9 @@ async fn scope_preferences_persist_in_the_hosts_documents_across_instances() -> 
     drop(first);
     // A second instance, over a fresh connection to the same host, sees it.
     let second = Connection::connect(bus.connect().await?).await?;
-    let store = super::storage::LinkedPrefsStore::new(super::storage::StorageLink::new(second));
+    let store = super::storage::LinkedPrefsStore::new(super::storage::StorageLink::new(
+        second, None,
+    ));
     let reread = tinyconnectors_sync::UserScopePref::load(&store, "gmail")
         .await
         .expect("loads");
