@@ -314,13 +314,33 @@ async fn verify_current_storage_after_migration(
         .await
         .map_err(|_| io::Error::other("profile B storage lease registration failed"))?;
 
-    host.reinitialize(module_name, json!({"storage_descriptor": descriptor_a}))
-        .await?;
+    host.reinitialize(
+        module_name,
+        json!({"storage_descriptor": descriptor_a.clone()}),
+    )
+    .await?;
     let proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
     if controller.name_owner(names::INTERFACE).await?.as_ref() != Some(module_peer) {
         return Err(io::Error::other("module identity changed after lease setup").into());
     }
     verify_capability_call(&proxy).await?;
+
+    let migrated_preference = get_scopes(&proxy, "gmail").await?;
+    if !migrated_preference.read || migrated_preference.write || migrated_preference.admin {
+        return Err(io::Error::other(
+            "GetUserScopes did not return the migrated nondefault value through the current lease",
+        )
+        .into());
+    }
+    let postlease_schema = MigrationModuleClient::discover(controller, module_peer).await?;
+    if postlease_schema.declaration().owner.as_str() != "connectors"
+        || postlease_schema.declaration().steps.len() != 2
+    {
+        return Err(io::Error::other(
+            "GetSchema changed or disappeared after the current storage lease was bound",
+        )
+        .into());
+    }
 
     let a_scopes = scopes_over(&proxy, "connectors-a-marker", true, false, true).await?;
     assert!(a_scopes.admin);
@@ -332,8 +352,11 @@ async fn verify_current_storage_after_migration(
     let b_scopes = scopes_over(&b_proxy, "connectors-b-marker", false, true, true).await?;
     assert!(b_scopes.admin);
 
-    host.reinitialize(module_name, json!({"storage_descriptor": descriptor_a}))
-        .await?;
+    host.reinitialize(
+        module_name,
+        json!({"storage_descriptor": descriptor_a.clone()}),
+    )
+    .await?;
     let a_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
     assert!(get_scopes(&a_proxy, "connectors-a-marker").await?.admin);
     let b_in_a = get_scopes(&a_proxy, "connectors-b-marker").await?;
@@ -367,6 +390,23 @@ async fn verify_current_storage_after_migration(
         .await?;
     let b_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
     assert!(get_scopes(&b_proxy, "connectors-b-marker").await?.admin);
+
+    let revoked_a_reinitialize = host
+        .reinitialize(
+            module_name,
+            json!({"storage_descriptor": descriptor_a.clone()}),
+        )
+        .await;
+    if revoked_a_reinitialize.is_ok() {
+        return Err(io::Error::other("a revoked profile A descriptor was reinitialized").into());
+    }
+    let still_b = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    if !get_scopes(&still_b, "connectors-b-marker").await?.admin {
+        return Err(io::Error::other(
+            "failed reinitialization with revoked A replaced the live profile B service",
+        )
+        .into());
+    }
 
     let invalid_reinitialize = host
         .reinitialize(
@@ -442,7 +482,7 @@ async fn seed_legacy_records(
         .put_with(
             "composio-user-scopes",
             "gmail",
-            serde_json::json!({"value": {"scopes": ["read"]}}),
+            serde_json::json!({"value": {"read": true, "write": false, "admin": false}}),
             Precondition::Absent,
             WriteOptions::new()
                 .schema(1)
@@ -469,7 +509,7 @@ async fn verify_migrated_user_scope(
         .get("connectors.user_scopes", target_id.as_str())
         .await?
         .ok_or_else(|| io::Error::other("user scope was not migrated"))?;
-    if migrated.doc != serde_json::json!({"scopes": ["read"]})
+    if migrated.doc != serde_json::json!({"read": true, "write": false, "admin": false})
         || migrated.meta.created_ms != 12345
         || migrated.meta.expires_ms != Some(9_876_543_210_000)
         || scoped
