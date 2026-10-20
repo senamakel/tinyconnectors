@@ -13,13 +13,13 @@ from typing import Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SOURCE = (
     "git+https://github.com/tinyhumansai/tinystoragedrivers"
-    "?rev=c9ea6ff1615b77b55d7269403af5fd11bedc9ce8"
-    "#c9ea6ff1615b77b55d7269403af5fd11bedc9ce8"
+    "?rev=7354214b8834b71bb0acb4a7c93b3efa051001b8"
+    "#7354214b8834b71bb0acb4a7c93b3efa051001b8"
 )
 EXPECTED_CONTRACT_VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())[
     "workspace"
 ]["package"]["version"]
-EXPECTED_STORAGE_BUS_VERSION = "1.5.0"
+EXPECTED_STORAGE_BUS_VERSION = "1.9.0"
 EXPECTED_STORAGE_NEEDS_CRATE = "tinystoragedrivers-bus"
 EXPECTED_PROOF_PACKAGE = "tinyconnectors-storage-needs-consumer-proof"
 EXPECTED_TREE_PACKAGES = {
