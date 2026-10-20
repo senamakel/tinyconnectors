@@ -93,6 +93,10 @@ async fn verify_migration_surface(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::sync::Arc;
 
+    if std::env::var_os("TINYCONNECTORS_TEST_MODULE").as_deref() != Some(module.as_os_str()) {
+        return Err(io::Error::other("migration proof artifact does not match its allowlisted path").into());
+    }
+
     use tinystoragedrivers_core::{
         MemoryStorage, Precondition, Scope, StorageBackend, WriteOptions,
         schema::delivery::MigrationDeliveryClient,
