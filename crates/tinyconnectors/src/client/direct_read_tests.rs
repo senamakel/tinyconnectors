@@ -5,12 +5,10 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::net::TcpListener;
-
 use tinyconnectors_bus::{ComposioDirectCredential, ComposioTransportConfig};
 
 use super::{list_connections, list_tools};
-use crate::client::test_support::{connect_proxy, json, server};
+use crate::client::test_support::{connect_proxy, json, refused_loopback_socket, server};
 
 fn credential(base_url: &str) -> ComposioDirectCredential {
     ComposioDirectCredential {
@@ -152,20 +150,23 @@ async fn a_body_that_is_not_json_is_a_decode_failure_with_the_host_wording() {
 
 #[tokio::test]
 async fn a_dead_server_reads_as_a_failure_to_send_the_request() {
-    let port = TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
-    let error = list_connections(&credential(&format!("http://127.0.0.1:{port}/api/v3")))
+    let (_reservation, address) = refused_loopback_socket();
+    let error = list_connections(&credential(&format!("http://{address}/api/v3")))
         .await
         .unwrap_err();
     assert!(
         error.starts_with(&format!(
-            "error sending request for url (http://127.0.0.1:{port}/api/v3/connected_accounts?limit=200)"
+            "error sending request for url (http://{address}/api/v3/connected_accounts?limit=200)"
         )),
         "{error}"
     );
+}
+
+#[test]
+fn a_reserved_non_listening_port_still_refuses_connections() {
+    let (_reservation, address) = refused_loopback_socket();
+    let error = std::net::TcpStream::connect(address).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::ConnectionRefused);
 }
 
 #[tokio::test]
@@ -184,7 +185,13 @@ async fn a_redirect_is_not_followed_and_never_carries_the_key() {
     assert_eq!(error, "Composio v3 connected_accounts failed: HTTP 302");
     assert!(
         destination_seen.lock().unwrap().is_empty(),
-        "the redirect target must never be contacted"
+        "the redirect target must never be contacted; requests: {:?}",
+        destination_seen
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|head| head.lines().next())
+            .collect::<Vec<_>>()
     );
 }
 
@@ -280,14 +287,10 @@ async fn a_destination_on_the_no_proxy_list_skips_the_proxy() {
 async fn a_proxy_that_refuses_the_tunnel_fails_the_call() {
     let (base, seen) = server(|_| json(r#"{"items":[]}"#));
     // Nothing listens on this port, so the proxy itself is unreachable.
-    let dead = TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let (_reservation, dead) = refused_loopback_socket();
     let mut through = credential(&base);
     through.transport = Some(ComposioTransportConfig {
-        proxy_url: Some(format!("http://127.0.0.1:{dead}")),
+        proxy_url: Some(format!("http://{dead}")),
         ..Default::default()
     });
     let error = list_connections(&through).await.unwrap_err();
