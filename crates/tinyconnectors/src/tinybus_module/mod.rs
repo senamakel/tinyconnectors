@@ -1235,8 +1235,6 @@ fn setup_factory()
 macro_rules! export_module {
     ($($declaration:tt)*) => {
         mod exports {
-            // TinyBus generates these three ABI items without rustdoc.
-            #![cfg_attr(feature = "static-link", expect(missing_docs, reason = "generated TinyBus ABI entries"))]
             use super::*;
             tinybus_module::module_export_optional_static! { $($declaration)* }
         }
