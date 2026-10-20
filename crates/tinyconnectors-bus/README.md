@@ -83,13 +83,19 @@ graph from an independent consumer workspace.
 
 ## Storage needs
 
-`STORAGE_NEEDS` is the concrete declaration exported by this crate; its
+`STORAGE_NEEDS` is the data-only declaration exported by this crate; its
 `StorageNeeds` value and `CollectionSpec`, `IndexSpec` and `SearchSpec` types
 come directly from `tinystoragedrivers-bus`. It describes requested resources;
-the host remains responsible for choosing and binding the grant. TinyConnectors
-requests the `composio-user-scopes` collection with no indexes, TTL field or
-search schema, plus the `triggers/` stream prefix. It requests no blob or secret
-prefixes.
+the host remains responsible for choosing and binding the grant. TinyConnectors requests the
+`connectors.user_scopes` collection with no indexes, TTL field or search
+schema, plus the `connectors.triggers/` stream prefix. It requests no blob or
+secret prefixes.
+
+This contract crate carries no schema executor or migration callback. The
+v1-to-v2 storage schema and preference encoding belong to the TinyConnectors
+implementation. The released storage-port contract does not yet let a host
+obtain those steps from a compiled module, so hosts must complete that TSD
+exchange and their storage adapter before adopting the current-only grant.
 
 ## Making a call
 

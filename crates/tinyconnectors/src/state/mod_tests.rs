@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use serde_json::json;
 use tinyconnectors_sync::{Error, PREFS_NAMESPACE, PrefsStore, ScopePrefStore, UserScopePref};
-use tinystoragedrivers_core::{DocumentStore, MemoryStorage, Scope, StorageBackend};
+use tinystoragedrivers_core::{DocumentStore, Key, MemoryStorage, Scope, StorageBackend};
 
-use super::{DocumentPrefsStore, STORAGE_NEEDS};
+use super::{DocumentPrefsStore, STORAGE_NEEDS, storage_needs};
 
 fn scoped(name: &str) -> tinystoragedrivers_core::ScopedStorage {
     MemoryStorage::new()
@@ -26,21 +26,6 @@ async fn a_key_that_was_never_written_reads_as_absent() {
     // The normal case for a toolkit the user never configured, not a failure.
     let (_, store) = store();
     assert!(store.get("gmail").await.unwrap().is_none());
-}
-
-#[tokio::test]
-async fn a_document_without_the_value_field_is_an_error_not_unset() {
-    let (documents, store) = store();
-    documents
-        .put(
-            PREFS_NAMESPACE,
-            "gmail",
-            json!({ "other": 1 }),
-            tinystoragedrivers_core::Precondition::None,
-        )
-        .await
-        .unwrap();
-    assert!(matches!(store.get("gmail").await, Err(Error::Store { .. })));
 }
 
 #[tokio::test]
@@ -85,7 +70,7 @@ async fn preferences_live_in_the_prefs_collection_one_document_per_toolkit() {
     store.set("gmail", &json!({ "v": "a" })).await.unwrap();
     store.set("slack", &json!({ "v": "b" })).await.unwrap();
 
-    assert_eq!(PREFS_NAMESPACE, "composio-user-scopes");
+    assert_eq!(PREFS_NAMESPACE, "connectors.user_scopes");
     assert!(
         documents
             .get(PREFS_NAMESPACE, "gmail")
@@ -167,7 +152,7 @@ async fn declared_storage_needs_cover_every_persisted_resource() {
     assert!(collection.ttl_field.is_none());
     assert!(collection.search.is_none());
     assert_eq!(needs.blob_prefixes, &[] as &[&str]);
-    assert_eq!(needs.stream_prefixes, &["triggers/"]);
+    assert_eq!(needs.stream_prefixes, &["connectors.triggers/"]);
     assert_eq!(needs.secret_prefixes, &[] as &[&str]);
 
     let storage = scoped("declared-needs");
@@ -177,12 +162,13 @@ async fn declared_storage_needs_cover_every_persisted_resource() {
         .set("gmail", &json!({ "read": true }))
         .await
         .unwrap();
+    let id = Key::of(["gmail"]).unwrap();
     let saved = documents
-        .get(&collection.name, "gmail")
+        .get(&collection.name, id.as_str())
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(saved.doc["value"]["read"], true);
+    assert_eq!(saved.doc["read"], true);
 
     let streams = storage.streams().clone();
     let archive = crate::triggers::TriggerArchive::new(streams.clone());
@@ -199,4 +185,33 @@ async fn declared_storage_needs_cover_every_persisted_resource() {
     let names = streams.streams(needs.stream_prefixes[0]).await.unwrap();
     assert_eq!(names.len(), 1);
     assert!(names[0].starts_with(needs.stream_prefixes[0]));
+}
+
+#[test]
+fn the_declared_grant_matches_what_the_stores_write() {
+    // The host generates its grant from the schema; if the stores moved to
+    // another collection or stream prefix without it, every call would be
+    // refused by the grant.
+    let needs = storage_needs();
+    assert_eq!(needs.collections, [PREFS_NAMESPACE]);
+    assert_eq!(needs.stream_prefixes, ["connectors.triggers/"]);
+    let archive = crate::triggers::TriggerArchive::new(scoped("grant").streams().clone());
+    assert!(
+        archive
+            .current_day_file()
+            .starts_with(needs.stream_prefixes[0].as_str())
+    );
+}
+
+#[tokio::test]
+async fn a_preference_is_stored_as_the_bare_object_with_its_schema_version() {
+    let (documents, store) = store();
+    store.set("gmail", &json!({ "read": true })).await.unwrap();
+    let found = documents
+        .get(PREFS_NAMESPACE, "gmail")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(found.doc, json!({ "read": true }));
+    assert_eq!(found.meta.schema, 2);
 }

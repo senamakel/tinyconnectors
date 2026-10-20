@@ -8,7 +8,7 @@
 //!
 //! One append per delivery, read back newest-first, never queried by anything
 //! but time. A daily stream on a `tinystoragedrivers` stream port does exactly
-//! that: the stream name is `triggers/<YYYY-MM-DD>`, each record is one
+//! that: the stream name is `connectors.triggers/<YYYY-MM-DD>`, each record is one
 //! delivery, and the payload is opaque JSON so a payload shape change needs no
 //! migration.
 //!

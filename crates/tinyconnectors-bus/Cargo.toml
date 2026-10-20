@@ -19,8 +19,8 @@ publish = false
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-# The host-grant schema is shared with the storage bus without enabling its
-# default TinyBus compatibility client.
+# The plain storage-grant vocabulary is shared with the storage bus without
+# enabling its default TinyBus compatibility client.
 tinystoragedrivers-bus = { workspace = true }
 # Verifying and decoding Composio's webhook deliveries, for a host that
 # receives them at its own endpoint. Optional: only the `webhook` feature
@@ -30,8 +30,10 @@ sha2 = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 # The webhook module's error type, the same derive the module crate uses.
 thiserror = { workspace = true, optional = true }
-
 [features]
+# Retained as an empty compatibility feature. Schema callbacks and migration
+# execution live in the TinyConnectors implementation crate.
+storage = []
 # `composio::triggers::webhook`: verify a delivery's signature and decode its
 # body into a `ComposioTriggerEvent`. Pure functions over bytes — no transport,
 # no runtime — for a host that owns a public webhook endpoint.

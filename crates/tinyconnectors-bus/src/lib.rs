@@ -15,10 +15,11 @@
 //!   member, plus [`names::METHODS`] listing them in dispatch order.
 //! - [`composio`] — the value vocabulary of the Composio backend, one module
 //!   per payload family. Its types are re-exported at this root.
+//! - [`storage`] — durable storage names and the plain grant-value type. The
+//!   schema and migration callbacks belong to the implementation crate.
 //! - [`version`] — [`CONTRACT_VERSION`] and the [`is_compatible`] bind rule.
-//! - [`STORAGE_NEEDS`] — the concrete storage declaration, with its
-//!   `StorageNeeds` type and collection schema re-exported from the canonical
-//!   `tinystoragedrivers-bus` contract.
+//! - [`STORAGE_NEEDS`] — the concrete data-only storage request, with its
+//!   collection schema types re-exported from `tinystoragedrivers-bus`.
 //!
 //! # One backend today, room for more
 //!
@@ -111,6 +112,7 @@ pub use processing::{
     RecordTriggerRequest,
 };
 pub mod names;
+pub mod storage;
 mod storage_needs;
 pub mod version;
 

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import tomllib
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -12,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from storage_needs_consumer import (  # noqa: E402
     EXPECTED_SOURCE,
+    EXPECTED_CONTRACT_VERSION,
     ProofError,
     validate_consumer_graph,
     verify_consumer,
@@ -19,7 +21,7 @@ from storage_needs_consumer import (  # noqa: E402
 
 FAKE_CARGO = ROOT / "scripts/test-support/fake-storage-needs-cargo.py"
 ROOT_ID = "path+file:///fixture/storage-needs#tinyconnectors-storage-needs-consumer-proof@0.0.0"
-BUS_ID = "path+file:///fixture/crates/tinyconnectors-bus#tinyconnectors-bus@0.20.2"
+BUS_ID = f"path+file:///fixture/crates/tinyconnectors-bus#tinyconnectors-bus@{EXPECTED_CONTRACT_VERSION}"
 TSD_ID = (
     "git+https://github.com/tinyhumansai/tinystoragedrivers"
     "?rev=c9ea6ff1615b77b55d7269403af5fd11bedc9ce8"
@@ -37,7 +39,7 @@ def good_metadata():
     return {
         "packages": [
             {"id": ROOT_ID, "name": "tinyconnectors-storage-needs-consumer-proof", "version": "0.0.0", "source": None},
-            {"id": BUS_ID, "name": "tinyconnectors-bus", "version": "0.20.2", "source": None},
+            {"id": BUS_ID, "name": "tinyconnectors-bus", "version": EXPECTED_CONTRACT_VERSION, "source": None},
             {"id": TSD_ID, "name": "tinystoragedrivers-bus", "version": "1.5.0", "source": EXPECTED_SOURCE},
             {"id": SERDE_ID, "name": "serde", "version": "1.0.229", "source": "registry+https://github.com/rust-lang/crates.io-index"},
             {"id": SERDE_JSON_ID, "name": "serde_json", "version": "1.0.154", "source": "registry+https://github.com/rust-lang/crates.io-index"},
@@ -67,7 +69,7 @@ def good_tree():
     return "\n".join(
         [
             "tinyconnectors-storage-needs-consumer-proof v0.0.0 (/fixture/storage-needs)",
-            "tinyconnectors-bus v0.20.2 (/fixture/crates/tinyconnectors-bus)",
+            f"tinyconnectors-bus v{EXPECTED_CONTRACT_VERSION} (/fixture/crates/tinyconnectors-bus)",
             "tinystoragedrivers-bus v1.5.0 (https://github.com/tinyhumansai/tinystoragedrivers?rev=c9ea6ff1615b77b55d7269403af5fd11bedc9ce8#c9ea6ff1)",
             "serde v1.0.229",
             "serde_json v1.0.154",
@@ -91,8 +93,48 @@ def add_dependency(metadata, package_id, package_name, *, kind=None, features=No
 
 
 class StorageNeedsConsumerTests(unittest.TestCase):
+    def test_storage_implementation_lives_outside_the_bus_contract(self):
+        bus_manifest = tomllib.loads(
+            (ROOT / "crates/tinyconnectors-bus/Cargo.toml").read_text()
+        )
+        self.assertNotIn("tinystoragedrivers-core", bus_manifest["dependencies"])
+        self.assertNotIn(
+            "tinystoragedrivers-core", bus_manifest.get("dev-dependencies", {})
+        )
+        self.assertEqual(bus_manifest["features"]["storage"], [])
+
+        bus_storage = ROOT / "crates/tinyconnectors-bus/src/storage"
+        self.assertEqual(
+            {path.name for path in bus_storage.glob("*.rs")},
+            {"mod.rs", "names.rs"},
+        )
+        bus_lib = (ROOT / "crates/tinyconnectors-bus/src/lib.rs").read_text()
+        self.assertIn("STORAGE_NEEDS", bus_lib)
+        self.assertIn("StorageNeeds", bus_lib)
+
+        module_manifest = tomllib.loads(
+            (ROOT / "crates/tinyconnectors/Cargo.toml").read_text()
+        )
+        self.assertNotIn(
+            "storage",
+            module_manifest["dependencies"]["tinyconnectors-bus"].get("features", []),
+        )
+        schema = ROOT / "crates/tinyconnectors/src/state/storage_schema.rs"
+        self.assertIn("Step::new(", schema.read_text())
+        self.assertIn("Step::stream(", schema.read_text())
+        self.assertTrue(
+            (ROOT / "crates/tinyconnectors/src/state/storage_schema_tests.rs").is_file()
+        )
+
     def test_accepts_direct_exact_source_without_client_features(self):
         validate_consumer_graph(good_metadata(), good_tree())
+
+    def test_rejects_wrong_contract_version(self):
+        metadata = good_metadata()
+        contract = next(package for package in metadata["packages"] if package["id"] == BUS_ID)
+        contract["version"] = "0.20.2"
+        with self.assertRaisesRegex(ProofError, "contract version is not the workspace release"):
+            validate_consumer_graph(metadata, good_tree())
 
     def test_rejects_forbidden_normal_dependency(self):
         metadata = good_metadata()
@@ -114,9 +156,9 @@ class StorageNeedsConsumerTests(unittest.TestCase):
 
     def test_rejects_tinyconnectors_implementation_dependency(self):
         metadata = good_metadata()
-        add_dependency(metadata, "path#tinyconnectors@0.20.2", "tinyconnectors")
+        add_dependency(metadata, "path#tinyconnectors@0.21.0", "tinyconnectors")
         with self.assertRaisesRegex(ProofError, "forbidden packages: tinyconnectors"):
-            validate_consumer_graph(metadata, good_tree() + "tinyconnectors v0.20.2\n")
+            validate_consumer_graph(metadata, good_tree() + "tinyconnectors v0.21.0\n")
 
     def test_rejects_async_runtime_dependency(self):
         metadata = good_metadata()

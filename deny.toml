@@ -7,8 +7,6 @@ all-features = true
 [advisories]
 # Fail on any crate with a security advisory or an unmaintained warning.
 # Add an entry here only with a comment explaining the exposure and the plan.
-ignore = []
-
 [licenses]
 # Licenses accepted for this crate and its dependencies. Keep GPL-3.0-only for
 # the crates in this workspace; the remaining entries cover compatible dependency

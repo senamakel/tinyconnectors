@@ -24,12 +24,14 @@ re-exports `StorageNeeds` and full collection declarations without enabling the
 TSD bus's optional TinyBus client. A host that only makes calls links this
 contract crate and compiles neither the connector module nor TinyBus.
 
-The module requests one `composio-user-scopes` document collection and the
-`triggers/` stream prefix. The collection has no index, TTL, or search schema;
-there are no blob or secret needs. These needs do not grant authority: the host
-selects the immutable grant and binds it to the authenticated caller. The
-host reads the actual `tinyconnectors_bus::STORAGE_NEEDS` declaration rather
-than rebuilding it from module implementation code.
+The module requests the v2 `connectors.user_scopes` document collection and
+`connectors.triggers/` stream prefix. The collection has no indexes, TTL field,
+or search schema; it stores one preference document per toolkit. Object-valued
+preferences are stored directly, while other JSON values use the
+`non_object_value` field. The module requests no blob or secret prefixes. These
+needs describe the current resources; the host reads
+`tinyconnectors_bus::STORAGE_NEEDS` as input to its grant policy and binds the
+selected scope to the authenticated caller.
 
 OpenHuman vendors its modules as git submodules under `vendor/`, so:
 
@@ -94,9 +96,13 @@ constructing a client and start choosing a blob. `state_dir` is accepted and
 ignored: the module keeps its scope-preference store and the trigger archive in
 the host's storage, reached over the storage bus
 (`tinystoragedrivers-busproxy::connect_storage`), with the scope bound by the
-host from the authenticated caller and the grant in `STORAGE_NEEDS`. Without
-served storage, history is unavailable and preferences are ephemeral. Until the preference migration in section 6
-lands, the host still owns the user's actual preference.
+host from the authenticated caller. The bus `STORAGE_NEEDS` declaration names
+the current resources; schema callbacks and v1 conversion are owned by the
+TinyConnectors implementation. The released TSD API still needs a compiled-
+module migration exchange and a host adapter before adoption of the current
+grant. Without served storage, history is unavailable and preferences are
+ephemeral. Until the preference migration in section 6 lands, the host still
+owns the user's actual preference.
 
 The blob is also optional. A module loaded without one still answers the
 capability members, so a signed-out user is not locked out of the question

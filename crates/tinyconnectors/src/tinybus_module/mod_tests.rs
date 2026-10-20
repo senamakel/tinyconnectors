@@ -1189,7 +1189,7 @@ async fn trigger_history_reads_the_archive_the_host_gave_it() -> tinybus::Result
 async fn scope_preferences_persist_in_the_hosts_documents_across_instances() -> tinybus::Result<()>
 {
     // The difference between the two stores, observable: a preference written
-    // through one module instance lands in the host's `composio-user-scopes`
+    // through one module instance lands in the host's `connectors.user_scopes`
     // collection and is read back by the next instance.
     let bus = MemoryBus::new();
     Broker::new().spawn(bus.clone());
@@ -1219,7 +1219,7 @@ async fn scope_preferences_persist_in_the_hosts_documents_across_instances() -> 
         .await
         .expect("reads")
         .expect("the preference is a document on the host");
-    assert_eq!(stored.doc["value"]["write"], false);
+    assert_eq!(stored.doc["write"], false);
 
     drop(proxy);
     drop(first);
@@ -1232,6 +1232,10 @@ async fn scope_preferences_persist_in_the_hosts_documents_across_instances() -> 
     assert!(!reread.write, "the choice survived the module restart");
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "current_grant_tests.rs"]
+mod current_grant_tests;
 
 #[tokio::test]
 async fn without_served_storage_preferences_stay_in_this_instance() {
