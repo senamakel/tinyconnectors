@@ -158,11 +158,15 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "0.21.0",
         )
         self.assertIn(
-            f'tinystoragedrivers-bus = {{ version = "{TSD_RELEASE}", '
-            'git = "https://github.com/tinyhumansai/tinystoragedrivers", '
+            'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
             f'rev = "{TSD_REV}", default-features = false }}',
             manifest,
         )
+        lock_packages = tomllib.loads((ROOT / "Cargo.lock").read_text())["package"]
+        tsd_bus = next(package for package in lock_packages
+                       if package["name"] == "tinystoragedrivers-bus")
+        self.assertEqual(tsd_bus["version"], TSD_RELEASE)
+        self.assertIn(f"rev={TSD_REV}#", tsd_bus["source"])
         self.assertRegex(manifest, rf'(?m)^tinybus = \{{ version = "{re.escape(TINYBUS_VERSION)}",')
         self.assertRegex(manifest, rf'(?m)^tinybus-module = "{re.escape(TINYBUS_MODULE_VERSION)}"$')
         self.assertIn(
