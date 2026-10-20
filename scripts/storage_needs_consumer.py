@@ -205,9 +205,9 @@ def validate_consumer_graph(metadata: dict[str, object], tree: str) -> None:
         raise _error("the canonical storage bus package is missing or duplicated")
     storage_id, storage_package = storage_packages[0]
     if storage_package.get("version") != EXPECTED_STORAGE_BUS_VERSION:
-        raise _error("the canonical storage bus package version is not 1.5.0")
+        raise _error("the canonical storage bus package version does not match the pin")
     if storage_package.get("source") != EXPECTED_SOURCE:
-        raise _error("the canonical storage bus source is not the pinned v1.5.0 commit")
+        raise _error("the canonical storage bus source is not the pinned commit")
 
     root_deps = root_node.get("deps")
     if not isinstance(root_deps, list):
