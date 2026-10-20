@@ -12,6 +12,7 @@ type RequestLog = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
 use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::{ModuleHost, ModuleInfo};
+use tinybus::transport::memory::MemoryTransport;
 use tinyconnectors::names;
 use tinyconnectors_bus::vocabulary::{
     ActionVocabularyResponse, NormalizeIdentitiesResponse, PreparedTaskFilter, VocabularyRequest,
@@ -24,6 +25,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let module = module_argument()?;
     if std::env::args().nth(2).as_deref() == Some("--restricted") {
         verify_restricted_surface(&module).await?;
+        return Ok(());
+    }
+    if std::env::args().nth(2).as_deref() == Some("--migration") {
+        verify_migration_surface(&module).await?;
+        return Ok(());
+    }
+    if std::env::args().nth(2).as_deref() == Some("--unselected-migration") {
+        verify_unselected_migration_fails_closed().await?;
         return Ok(());
     }
     let (module_host, client, broker_task) = tinybus::test_support::start_bus().await?;
@@ -56,12 +65,192 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !status.success() {
         return Err(io::Error::other("restricted module verification failed").into());
     }
+    for mode in ["--migration", "--unselected-migration"] {
+        let status = std::process::Command::new(std::env::current_exe()?)
+            .arg(&module)
+            .arg(mode)
+            .status()?;
+        if !status.success() {
+            return Err(io::Error::other(format!(
+                "compiled module verification failed for {mode}"
+            ))
+            .into());
+        }
+    }
 
     println!(
         "verified {} as TinyBus module `{}`",
         module.display(),
         info.name
     );
+    broker_task.abort();
+    Ok(())
+}
+
+/// Discover and run the owner migration through the compiled module artifact.
+async fn verify_migration_surface(
+    module: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::sync::Arc;
+
+    use tinystoragedrivers_core::{
+        MemoryStorage, Precondition, Scope, StorageBackend, WriteOptions,
+        schema::delivery::MigrationDeliveryClient,
+        schema::{MigrateOptions, Registry},
+    };
+    use tinystoragedrivers_tinybus::migration::{
+        EXCHANGE_MEMBER, MIGRATION_INTERFACE, MIGRATION_OBJECT_PATH, MigrationExchangeRequest,
+        MigrationModuleClient,
+    };
+
+    let bus = tinybus::transport::memory::MemoryBus::new();
+    let broker = Broker::new_restricted_module_control();
+    let broker_task = broker.clone().spawn(bus.clone());
+    let (controller_transport, controller_endpoint) = MemoryTransport::pair();
+    broker.attach_module_controller(Arc::new(controller_transport))?;
+    let controller = Connection::connect(Box::new(controller_endpoint)).await?;
+    let outsider = Connection::connect(bus.connect().await?).await?;
+    let host = ModuleHost::new(broker);
+    let info = tinybus::test_support::admit_module(
+        &host,
+        "TINYCONNECTORS_TEST_MODULE",
+        env!("CARGO_PKG_NAME"),
+    )?;
+    host.ensure_ready(info.manifest.bus_name.as_str()).await?;
+
+    // Migration discovery is the first post-ready call. The module has not
+    // made an ordinary storage-bus lease or served a connector request yet.
+    let module_peer = controller
+        .name_owner(info.manifest.bus_name.as_str())
+        .await?
+        .ok_or_else(|| io::Error::other("compiled module has no broker owner"))?;
+    let migration = MigrationModuleClient::discover(&controller, &module_peer).await?;
+    let declaration = migration.declaration().clone();
+
+    let raw = controller.proxy(
+        module_peer.as_str(),
+        MIGRATION_OBJECT_PATH,
+        MIGRATION_INTERFACE,
+    )?;
+    let outsider_proxy = outsider.proxy(
+        module_peer.as_str(),
+        MIGRATION_OBJECT_PATH,
+        MIGRATION_INTERFACE,
+    )?;
+    let unauthorized = outsider_proxy
+        .call_confidential::<serde_json::Value>(EXCHANGE_MEMBER, serde_json::json!(17))
+        .await;
+    if !matches!(unauthorized, Err(error) if error.to_string().contains("migration authority unavailable"))
+    {
+        return Err(io::Error::other(
+            "malformed migration request was not denied by authority first",
+        )
+        .into());
+    }
+    let plain = raw.call::<serde_json::Value>("GetSchema", ()).await;
+    if !matches!(plain, Err(error) if error.wire_name() == tinybus::Error::CONFIDENTIALITY_REQUIRED)
+    {
+        return Err(io::Error::other("plain migration discovery was accepted").into());
+    }
+    let _ = MigrationExchangeRequest::Begin { request_len: 1 };
+
+    // This unrelated primary service remains usable after denied migration
+    // calls, and before the module connects to host storage.
+    let connector = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let _: tinyconnectors_bus::ComposioCapabilitiesResponse = connector
+        .call(names::methods::LIST_CAPABILITIES, ())
+        .await?;
+
+    let backend = MemoryStorage::new();
+    let registry =
+        Registry::compose_with_declarations(std::iter::empty(), std::iter::once(declaration))?;
+    registry.prepare(&backend).await?;
+    let scope_name = Scope::new("connectors-migration-e2e")?;
+    let scoped = backend.for_scope(&scope_name)?;
+    scoped
+        .documents()
+        .put_with(
+            "composio-user-scopes",
+            "gmail",
+            serde_json::json!({"value": {"scopes": ["read"]}}),
+            Precondition::Absent,
+            WriteOptions::new()
+                .schema(1)
+                .created_ms(12345)
+                .expires_ms(9_876_543_210_000),
+        )
+        .await?;
+    scoped
+        .streams()
+        .append(
+            "triggers/2026-10-21",
+            serde_json::json!({"trigger":"daily"}),
+        )
+        .await?;
+
+    registry
+        .migrate_with_executor(
+            &scoped,
+            &MigrateOptions::new(),
+            &MigrationDeliveryClient::new(Arc::new(migration)),
+        )
+        .await?;
+    registry.check_ready_in(&scope_name, "connectors.user_scopes")?;
+    registry.check_ready_in(&scope_name, "connectors.triggers")?;
+    let target_id = tinystoragedrivers_core::Key::of(["gmail"])?;
+    let migrated = scoped
+        .documents()
+        .get("connectors.user_scopes", target_id.as_str())
+        .await?
+        .ok_or_else(|| io::Error::other("user scope was not migrated"))?;
+    if migrated.doc != serde_json::json!({"scopes": ["read"]})
+        || migrated.meta.created_ms != 12345
+        || migrated.meta.expires_ms != Some(9_876_543_210_000)
+        || scoped
+            .documents()
+            .get("composio-user-scopes", "gmail")
+            .await?
+            .is_some()
+    {
+        return Err(
+            io::Error::other("user scope migration did not preserve data and metadata").into(),
+        );
+    }
+    let trigger_streams = scoped.streams().streams("connectors.triggers/").await?;
+    if trigger_streams != ["connectors.triggers/2026-10-21"]
+        || scoped
+            .streams()
+            .streams("triggers/")
+            .await?
+            .contains(&"triggers/2026-10-21".to_owned())
+        || scoped
+            .streams()
+            .read_window("connectors.triggers/2026-10-21", 0, 10)
+            .await?
+            .first()
+            .is_none_or(|entry| entry.value != serde_json::json!({"trigger":"daily"}))
+    {
+        return Err(io::Error::other("trigger stream migration did not move its data").into());
+    }
+
+    broker_task.abort();
+    Ok(())
+}
+
+async fn verify_unselected_migration_fails_closed() -> Result<(), Box<dyn std::error::Error>> {
+    let (module_host, _, broker_task) = tinybus::test_support::start_bus().await?;
+    let info = tinybus::test_support::admit_module(
+        &module_host,
+        "TINYCONNECTORS_TEST_MODULE",
+        env!("CARGO_PKG_NAME"),
+    )?;
+    if module_host
+        .ensure_ready(info.manifest.bus_name.as_str())
+        .await
+        .is_ok()
+    {
+        return Err(io::Error::other("migration module setup accepted an unselected host").into());
+    }
     broker_task.abort();
     Ok(())
 }
