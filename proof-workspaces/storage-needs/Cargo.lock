@@ -105,8 +105,8 @@ dependencies = [
 
 [[package]]
 name = "tinystoragedrivers-bus"
-version = "1.5.0"
-source = "git+https://github.com/tinyhumansai/tinystoragedrivers?rev=c9ea6ff1615b77b55d7269403af5fd11bedc9ce8#c9ea6ff1615b77b55d7269403af5fd11bedc9ce8"
+version = "1.9.0"
+source = "git+https://github.com/tinyhumansai/tinystoragedrivers?rev=7354214b8834b71bb0acb4a7c93b3efa051001b8#7354214b8834b71bb0acb4a7c93b3efa051001b8"
 dependencies = [
  "serde",
  "serde_json",
