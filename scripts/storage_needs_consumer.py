@@ -13,8 +13,8 @@ from typing import Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SOURCE = (
     "git+https://github.com/tinyhumansai/tinystoragedrivers"
-    "?rev=7354214b8834b71bb0acb4a7c93b3efa051001b8"
-    "#7354214b8834b71bb0acb4a7c93b3efa051001b8"
+    "?rev=a04e3a174fa8f28d5229a816ca6b39c72a9efd7b"
+    "#a04e3a174fa8f28d5229a816ca6b39c72a9efd7b"
 )
 EXPECTED_CONTRACT_VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())[
     "workspace"

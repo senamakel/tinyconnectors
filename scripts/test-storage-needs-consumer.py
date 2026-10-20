@@ -24,7 +24,7 @@ ROOT_ID = "path+file:///fixture/storage-needs#tinyconnectors-storage-needs-consu
 BUS_ID = f"path+file:///fixture/crates/tinyconnectors-bus#tinyconnectors-bus@{EXPECTED_CONTRACT_VERSION}"
 TSD_ID = (
     "git+https://github.com/tinyhumansai/tinystoragedrivers"
-    "?rev=7354214b8834b71bb0acb4a7c93b3efa051001b8"
+    "?rev=a04e3a174fa8f28d5229a816ca6b39c72a9efd7b"
     "#tinystoragedrivers-bus@1.9.0"
 )
 SERDE_ID = "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.229"
@@ -70,7 +70,7 @@ def good_tree():
         [
             "tinyconnectors-storage-needs-consumer-proof v0.0.0 (/fixture/storage-needs)",
             f"tinyconnectors-bus v{EXPECTED_CONTRACT_VERSION} (/fixture/crates/tinyconnectors-bus)",
-            "tinystoragedrivers-bus v1.9.0 (https://github.com/tinyhumansai/tinystoragedrivers?rev=7354214b8834b71bb0acb4a7c93b3efa051001b8#7354214b)",
+            "tinystoragedrivers-bus v1.9.0 (https://github.com/tinyhumansai/tinystoragedrivers?rev=a04e3a174fa8f28d5229a816ca6b39c72a9efd7b#a04e3a17)",
             "serde v1.0.229",
             "serde_json v1.0.154",
         ]
@@ -174,14 +174,14 @@ class StorageNeedsConsumerTests(unittest.TestCase):
     def test_rejects_wrong_canonical_revision(self):
         metadata = good_metadata()
         package = next(package for package in metadata["packages"] if package["id"] == TSD_ID)
-        package["source"] = EXPECTED_SOURCE.replace("7354214", "08caa16")
+        package["source"] = EXPECTED_SOURCE.replace("a04e3a1", "08caa16")
         with self.assertRaisesRegex(ProofError, "source is not the pinned"):
             validate_consumer_graph(metadata, good_tree())
 
     def test_rejects_tag_source_even_when_name_and_version_match(self):
         metadata = good_metadata()
         package = next(package for package in metadata["packages"] if package["id"] == TSD_ID)
-        package["source"] = "git+https://github.com/tinyhumansai/tinystoragedrivers?tag=v1.9.0#7354214b"
+        package["source"] = "git+https://github.com/tinyhumansai/tinystoragedrivers?tag=v1.9.0#a04e3a17"
         with self.assertRaisesRegex(ProofError, "source is not the pinned"):
             validate_consumer_graph(metadata, good_tree())
 
@@ -215,7 +215,7 @@ class StorageNeedsConsumerTests(unittest.TestCase):
 
     def test_fails_closed_when_normal_build_tree_omits_the_storage_package(self):
         tree = good_tree().replace(
-            "tinystoragedrivers-bus v1.9.0 (https://github.com/tinyhumansai/tinystoragedrivers?rev=7354214b8834b71bb0acb4a7c93b3efa051001b8#7354214b)\n",
+            "tinystoragedrivers-bus v1.9.0 (https://github.com/tinyhumansai/tinystoragedrivers?rev=a04e3a174fa8f28d5229a816ca6b39c72a9efd7b#a04e3a17)\n",
             "",
         )
         with self.assertRaisesRegex(ProofError, "cargo tree omitted required packages"):
