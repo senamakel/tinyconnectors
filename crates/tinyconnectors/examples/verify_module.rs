@@ -9,7 +9,7 @@ use std::thread;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::json;
 type RequestLog = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
 
 use tinybus::Connection;
