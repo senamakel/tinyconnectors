@@ -1,7 +1,10 @@
 //! Restricted initialization, dispatch refusals, and immutable runtime handshake.
 
 use super::*;
-use tinybus::{broker::Broker, transport::memory::MemoryBus};
+use tinybus::{
+    broker::Broker,
+    transport::memory::{MemoryBus, MemoryTransport},
+};
 use tinyconnectors_bus::names::methods;
 
 async fn fixture() -> (Connection, Connection, tinybus::Proxy) {
@@ -180,12 +183,16 @@ async fn compiled_instance(
     config: serde_json::Value,
 ) -> (tinybus::module::ModuleHost, Connection, tinybus::Proxy) {
     let bus = MemoryBus::new();
-    let broker = Broker::new();
+    let broker = Broker::new_restricted_module_control();
     broker.clone().spawn(bus.clone());
+    let (host_transport, controller_transport) = MemoryTransport::pair();
+    broker
+        .attach_module_controller(std::sync::Arc::new(host_transport))
+        .unwrap();
     let host = tinybus::module::ModuleHost::new(broker);
     host.attach_linked_with_config(crate::tinybus_module::linked_module().unwrap(), config)
         .unwrap();
-    let caller = Connection::connect(bus.connect().await.unwrap())
+    let caller = Connection::connect(Box::new(controller_transport))
         .await
         .unwrap();
     let proxy = caller
