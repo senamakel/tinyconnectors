@@ -324,23 +324,7 @@ async fn verify_current_storage_after_migration(
         return Err(io::Error::other("module identity changed after lease setup").into());
     }
     verify_capability_call(&proxy).await?;
-
-    let migrated_preference = get_scopes(&proxy, "gmail").await?;
-    if !migrated_preference.read || migrated_preference.write || migrated_preference.admin {
-        return Err(io::Error::other(
-            "GetUserScopes did not return the migrated nondefault value through the current lease",
-        )
-        .into());
-    }
-    let postlease_schema = MigrationModuleClient::discover(controller, module_peer).await?;
-    if postlease_schema.declaration().owner.as_str() != "connectors"
-        || postlease_schema.declaration().steps.len() != 2
-    {
-        return Err(io::Error::other(
-            "GetSchema changed or disappeared after the current storage lease was bound",
-        )
-        .into());
-    }
+    verify_migrated_scope_and_postlease_schema(&proxy, controller, module_peer).await?;
 
     let a_scopes = scopes_over(&proxy, "connectors-a-marker", true, false, true).await?;
     assert!(a_scopes.admin);
@@ -391,22 +375,13 @@ async fn verify_current_storage_after_migration(
     let b_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
     assert!(get_scopes(&b_proxy, "connectors-b-marker").await?.admin);
 
-    let revoked_a_reinitialize = host
-        .reinitialize(
-            module_name,
-            json!({"storage_descriptor": descriptor_a.clone()}),
-        )
-        .await;
-    if revoked_a_reinitialize.is_ok() {
-        return Err(io::Error::other("a revoked profile A descriptor was reinitialized").into());
-    }
-    let still_b = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    if !get_scopes(&still_b, "connectors-b-marker").await?.admin {
-        return Err(io::Error::other(
-            "failed reinitialization with revoked A replaced the live profile B service",
-        )
-        .into());
-    }
+    verify_revoked_a_reinitialization(
+        host,
+        module_name,
+        json!({"storage_descriptor": descriptor_a.clone()}),
+        controller,
+    )
+    .await?;
 
     let invalid_reinitialize = host
         .reinitialize(
@@ -428,6 +403,50 @@ async fn verify_current_storage_after_migration(
         return Err(io::Error::other("failed reinitialization replaced the live service").into());
     }
     assert!(registration.revoke(&lease_b).await);
+    Ok(())
+}
+
+async fn verify_migrated_scope_and_postlease_schema(
+    proxy: &tinybus::Proxy,
+    controller: &Connection,
+    module_peer: &tinybus::BusName,
+) -> VerifyResult<()> {
+    let migrated_preference = get_scopes(proxy, "gmail").await?;
+    if !migrated_preference.read || migrated_preference.write || migrated_preference.admin {
+        return Err(io::Error::other(
+            "GetUserScopes did not return the migrated nondefault value through the current lease",
+        )
+        .into());
+    }
+    let postlease_schema = MigrationModuleClient::discover(controller, module_peer).await?;
+    if postlease_schema.declaration().owner.as_str() != "connectors"
+        || postlease_schema.declaration().steps.len() != 2
+    {
+        return Err(io::Error::other(
+            "GetSchema changed or disappeared after the current storage lease was bound",
+        )
+        .into());
+    }
+    Ok(())
+}
+
+async fn verify_revoked_a_reinitialization(
+    host: &ModuleHost,
+    module_name: &str,
+    descriptor_a: serde_json::Value,
+    controller: &Connection,
+) -> VerifyResult<()> {
+    let revoked_a_reinitialize = host.reinitialize(module_name, descriptor_a).await;
+    if revoked_a_reinitialize.is_ok() {
+        return Err(io::Error::other("a revoked profile A descriptor was reinitialized").into());
+    }
+    let still_b = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    if !get_scopes(&still_b, "connectors-b-marker").await?.admin {
+        return Err(io::Error::other(
+            "failed reinitialization with revoked A replaced the live profile B service",
+        )
+        .into());
+    }
     Ok(())
 }
 
