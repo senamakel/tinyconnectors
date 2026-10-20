@@ -41,13 +41,13 @@ tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedri
 tinyconnectors-sync = { path = "crates/tinyconnectors-sync" }
 # TinyBus 0.3.3 matches the published SDK selected for the host native module
 # runtime. Socket and CLI features are unnecessary here.
-tinybus = { version = "0.3.3", default-features = false, features = [
+tinybus = { version = "0.3.9", default-features = false, features = [
     "macros",
     "modules",
 ] }
 # The module-side SDK owns the isolated runtime and exports the ABI entrypoints
 # required by TinyBus's dynamic loader.
-tinybus-module = "0.3.3"
+tinybus-module = "0.3.9"
 
 # Derive macros for the crate-wide error type in `crates/tinyconnectors/src/error/`.
 # Every dependency entry should carry a comment like this one saying why it is
