@@ -84,9 +84,6 @@ tinybus = { workspace = true, features = ["test-support"] }
 # `StorageServer` bound to an in-memory backend.
 tinystoragedrivers-busproxy = { workspace = true }
 tinystoragedrivers-client = { workspace = true }
-# Creates a bound, non-listening loopback socket for deterministic refusal tests.
-socket2 = "0.6"
-
 # The bundled examples drive the loaded module through TinyBus.
 [[example]]
 name = "verify_module"

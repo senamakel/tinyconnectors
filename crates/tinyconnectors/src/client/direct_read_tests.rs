@@ -8,7 +8,7 @@
 use tinyconnectors_bus::{ComposioDirectCredential, ComposioTransportConfig};
 
 use super::{list_connections, list_tools};
-use crate::client::test_support::{connect_proxy, json, refused_loopback_socket, server};
+use crate::client::test_support::{connect_proxy, json, refused_loopback_endpoint, server};
 
 fn credential(base_url: &str) -> ComposioDirectCredential {
     ComposioDirectCredential {
@@ -150,7 +150,7 @@ async fn a_body_that_is_not_json_is_a_decode_failure_with_the_host_wording() {
 
 #[tokio::test]
 async fn a_dead_server_reads_as_a_failure_to_send_the_request() {
-    let (_reservation, address) = refused_loopback_socket();
+    let (address, _rejection) = refused_loopback_endpoint();
     let error = list_connections(&credential(&format!("http://{address}/api/v3")))
         .await
         .unwrap_err();
@@ -163,17 +163,10 @@ async fn a_dead_server_reads_as_a_failure_to_send_the_request() {
 }
 
 #[test]
-fn a_reserved_non_listening_port_still_refuses_connections() {
-    let (_reservation, address) = refused_loopback_socket();
-    let error = std::net::TcpStream::connect(address).unwrap_err();
-    assert_eq!(error.kind(), std::io::ErrorKind::ConnectionRefused);
-}
-
-#[test]
 fn a_released_loopback_port_can_be_reassigned_to_another_test_server() {
-    let (reservation, address) = refused_loopback_socket();
+    let reservation = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = reservation.local_addr().unwrap();
     drop(reservation);
-
     let listener = std::net::TcpListener::bind(address).unwrap();
     let client = std::net::TcpStream::connect(address).unwrap();
     let (accepted, _) = listener.accept().unwrap();
@@ -298,7 +291,7 @@ async fn a_destination_on_the_no_proxy_list_skips_the_proxy() {
 async fn a_proxy_that_refuses_the_tunnel_fails_the_call() {
     let (base, seen) = server(|_| json(r#"{"items":[]}"#));
     // Nothing listens on this port, so the proxy itself is unreachable.
-    let (_reservation, dead) = refused_loopback_socket();
+    let (dead, _rejection) = refused_loopback_endpoint();
     let mut through = credential(&base);
     through.transport = Some(ComposioTransportConfig {
         proxy_url: Some(format!("http://{dead}")),

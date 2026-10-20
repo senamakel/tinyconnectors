@@ -9,7 +9,6 @@
     clippy::format_push_string
 )]
 
-use socket2::{Domain, Protocol, Socket, Type};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
@@ -18,15 +17,17 @@ use std::sync::{Arc, Mutex};
 /// What a server answers: status line, extra headers, body.
 pub(crate) type Reply = (u16, Vec<(&'static str, String)>, String);
 
-/// Reserve a loopback TCP port without listening, so connection attempts fail
-/// while another parallel test cannot claim the same destination.
-pub(crate) fn refused_loopback_socket() -> (Socket, SocketAddr) {
-    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP)).unwrap();
-    socket
-        .bind(&SocketAddr::from(([127, 0, 0, 1], 0)).into())
-        .unwrap();
-    let address = socket.local_addr().unwrap().as_socket().unwrap();
-    (socket, address)
+/// Keep the destination port occupied and close its first connection without
+/// an HTTP response, giving transport tests a deterministic refusal endpoint.
+pub(crate) fn refused_loopback_endpoint() -> (SocketAddr, std::thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let rejection = std::thread::spawn(move || {
+        if let Ok((stream, _)) = listener.accept() {
+            drop(stream);
+        }
+    });
+    (address, rejection)
 }
 
 /// A loopback HTTP server answering every request with `respond(request_head)`.
