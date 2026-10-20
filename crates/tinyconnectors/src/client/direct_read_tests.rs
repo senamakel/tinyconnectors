@@ -169,6 +169,17 @@ fn a_reserved_non_listening_port_still_refuses_connections() {
     assert_eq!(error.kind(), std::io::ErrorKind::ConnectionRefused);
 }
 
+#[test]
+fn a_released_loopback_port_can_be_reassigned_to_another_test_server() {
+    let (reservation, address) = refused_loopback_socket();
+    drop(reservation);
+
+    let listener = std::net::TcpListener::bind(address).unwrap();
+    let client = std::net::TcpStream::connect(address).unwrap();
+    let (accepted, _) = listener.accept().unwrap();
+    assert_eq!(client.peer_addr().unwrap(), accepted.local_addr().unwrap());
+}
+
 #[tokio::test]
 async fn a_redirect_is_not_followed_and_never_carries_the_key() {
     let (destination, destination_seen) = server(|_| json(r#"{"items":[]}"#));

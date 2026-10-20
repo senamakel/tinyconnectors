@@ -9,11 +9,11 @@
     clippy::format_push_string
 )]
 
+use socket2::{Domain, Protocol, Socket, Type};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use socket2::{Domain, Protocol, Socket, Type};
 
 /// What a server answers: status line, extra headers, body.
 pub(crate) type Reply = (u16, Vec<(&'static str, String)>, String);
