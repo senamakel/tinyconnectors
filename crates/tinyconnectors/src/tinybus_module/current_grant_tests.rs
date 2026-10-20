@@ -1,4 +1,4 @@
-//! Linked module tests for access through the current TinyBus storage grants.
+//! Linked module tests for access through the current `TinyBus` storage grants.
 
 use super::*;
 
