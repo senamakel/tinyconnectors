@@ -8,7 +8,11 @@ use tinystoragedrivers_tinybus::migration::{
 
 #[test]
 fn declaration_exports_the_implementation_schema_and_explicit_operations() {
-    let declaration = declaration().expect("the owner schema has external operations");
+    let result = declaration();
+    assert!(result.is_ok(), "the owner schema has external operations");
+    let Some(declaration) = result.ok() else {
+        return;
+    };
     assert_eq!(declaration.owner.as_str(), "connectors");
     assert!(declaration.items.iter().any(|item| matches!(
         item,
@@ -22,8 +26,14 @@ fn declaration_exports_the_implementation_schema_and_explicit_operations() {
     let documents = declaration
         .steps
         .iter()
-        .find(|step| step.id == "user_scopes_unwrap_value")
-        .expect("the implementation declares the preferences transform");
+        .find(|step| step.id == "user_scopes_unwrap_value");
+    assert!(
+        documents.is_some(),
+        "the implementation declares the preferences transform"
+    );
+    let Some(documents) = documents else {
+        return;
+    };
     assert_eq!(documents.item, "connectors.user_scopes");
     assert_eq!(documents.from, 1);
     assert_eq!(documents.to, 2);
@@ -35,8 +45,14 @@ fn declaration_exports_the_implementation_schema_and_explicit_operations() {
     let stream = declaration
         .steps
         .iter()
-        .find(|step| step.id == "triggers_rename")
-        .expect("the implementation declares the trigger transform");
+        .find(|step| step.id == "triggers_rename");
+    assert!(
+        stream.is_some(),
+        "the implementation declares the trigger transform"
+    );
+    let Some(stream) = stream else {
+        return;
+    };
     assert_eq!(stream.item, "connectors.triggers");
     assert_eq!(stream.from, 1);
     assert_eq!(stream.to, 2);
@@ -63,23 +79,44 @@ fn migration_handler_reuses_owner_transforms_and_preserves_document_history() {
             },
         }],
     }));
-    let MigrationPayloadReply::Documents(Ok(records)) = reply else {
-        panic!("preferences transform must succeed");
+    let records = match reply {
+        MigrationPayloadReply::Documents(Ok(records)) => Some(records),
+        _ => None,
+    };
+    assert!(records.is_some(), "preferences transform must succeed");
+    let Some(records) = records else {
+        return;
     };
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0].collection, "connectors.user_scopes");
-    assert_eq!(records[0].id, Key::of(["gmail"]).unwrap().as_str());
-    assert_eq!(records[0].body, json!({"scopes": ["read"]}));
-    assert_eq!(records[0].created_ms, Some(123));
-    assert_eq!(records[0].expires, Expiry::At(789));
+    let Some(record) = records.first() else {
+        return;
+    };
+    assert_eq!(record.collection, "connectors.user_scopes");
+    let expected_id = Key::of(["gmail"]).map(|key| key.as_str().to_owned());
+    assert!(expected_id.is_ok());
+    assert_eq!(
+        Some(record.id.as_str()),
+        expected_id.as_ref().ok().map(String::as_str)
+    );
+    assert_eq!(record.body, json!({"scopes": ["read"]}));
+    assert_eq!(record.created_ms, Some(123));
+    assert_eq!(record.expires, Expiry::At(789));
 
     let reply = handler.transform(MigrationPayload::StreamPlan(StreamPlanRequest {
         operation: TRIGGERS_OPERATION.to_owned(),
         version: TRIGGERS_OPERATION_VERSION,
         source: "triggers/2026-10-21".to_owned(),
     }));
-    let MigrationPayloadReply::StreamPlan(Ok(Some(plan))) = reply else {
-        panic!("trigger stream transform must produce a plan");
+    let plan = match reply {
+        MigrationPayloadReply::StreamPlan(Ok(Some(plan))) => Some(plan),
+        _ => None,
+    };
+    assert!(
+        plan.is_some(),
+        "trigger stream transform must produce a plan"
+    );
+    let Some(plan) = plan else {
+        return;
     };
     assert_eq!(plan.target, "connectors.triggers/2026-10-21");
     assert_eq!(plan.mode, StreamMapMode::Identity);
