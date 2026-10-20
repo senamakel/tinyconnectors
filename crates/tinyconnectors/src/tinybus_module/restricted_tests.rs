@@ -1,9 +1,9 @@
 //! Restricted initialization, dispatch refusals, and immutable runtime handshake.
 
 use super::*;
-use tinybus::{broker::Broker, transport::memory::MemoryBus};
 #[cfg(feature = "static-link")]
 use tinybus::transport::memory::MemoryTransport;
+use tinybus::{broker::Broker, transport::memory::MemoryBus};
 use tinyconnectors_bus::names::methods;
 
 async fn fixture() -> (Connection, Connection, tinybus::Proxy) {
