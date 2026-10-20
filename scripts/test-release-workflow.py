@@ -12,6 +12,11 @@ WORKFLOW = ROOT / ".github/workflows/release.yml"
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
 REVIEWED_RELEASE_PIN = "6ed83b04aab2d8977ec62e966cb914531e534fa4"
 LEGACY_RELEASE_PIN = "4adc1080fb495098e7af1aade82ed7e6e3c69bb7"
+TSD_RELEASE = "1.9.0"
+TSD_REV = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b"
+TINYBUS_VERSION = "=0.3.11"
+TINYBUS_MODULE_VERSION = "0.3.11"
+TINYBUS_REV = "9e14f65666b11782ec1054aba576114026d180f8"
 
 
 def resolve_script(workflow):
@@ -153,12 +158,13 @@ class ReleaseWorkflowTests(unittest.TestCase):
             "0.21.0",
         )
         self.assertIn(
-            'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
-            'rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }',
+            f'tinystoragedrivers-bus = {{ version = "{TSD_RELEASE}", '
+            'git = "https://github.com/tinyhumansai/tinystoragedrivers", '
+            f'rev = "{TSD_REV}", default-features = false }}',
             manifest,
         )
-        self.assertRegex(manifest, r'(?m)^tinybus = \{ version = "0\.3\.3",')
-        self.assertRegex(manifest, r'(?m)^tinybus-module = "0\.3\.3"$')
+        self.assertRegex(manifest, rf'(?m)^tinybus = \{{ version = "{re.escape(TINYBUS_VERSION)}",')
+        self.assertRegex(manifest, rf'(?m)^tinybus-module = "{re.escape(TINYBUS_MODULE_VERSION)}"$')
         self.assertIn(
             '[patch.crates-io]\ntinybus = { path = "vendor/tinybus/crates/tinybus" }\n'
             'tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }',
@@ -174,11 +180,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
             text=True, capture_output=True, check=True,
         ).stdout.split()
         self.assertEqual(tree_entry[:2], ["160000", "commit"])
-        self.assertEqual(tree_entry[2], "207a9a7df15e44fdba00a807d0f7eaf21904ba0e")
+        self.assertEqual(tree_entry[2], TINYBUS_REV)
         proof_manifest = (ROOT / "proof-workspaces/storage-needs/Cargo.toml").read_text()
         self.assertIn(
             'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
-            'rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }',
+            f'rev = "{TSD_REV}", default-features = false }}',
             proof_manifest,
         )
         self.assertNotRegex(proof_manifest, r"(?m)^tinybus(?:-module)?\s*=")
