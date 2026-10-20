@@ -4,6 +4,7 @@ use std::io;
 use std::io::{BufRead, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -17,6 +18,14 @@ use tinyconnectors::names;
 use tinyconnectors_bus::vocabulary::{
     ActionVocabularyResponse, NormalizeIdentitiesResponse, PreparedTaskFilter, VocabularyRequest,
     VocabularyResponse,
+};
+use tinystoragedrivers_core::{
+    MemoryStorage, Precondition, Scope, StorageBackend, WriteOptions,
+    schema::delivery::MigrationDeliveryClient,
+    schema::{MigrateOptions, Registry},
+};
+use tinystoragedrivers_tinybus::migration::{
+    EXCHANGE_MEMBER, MIGRATION_INTERFACE, MIGRATION_OBJECT_PATH, MigrationModuleClient,
 };
 
 /// Verify classic behavior and then restricted behavior in a fresh process.
@@ -91,23 +100,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn verify_migration_surface(
     module: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use std::sync::Arc;
-
     if std::env::var_os("TINYCONNECTORS_TEST_MODULE").as_deref() != Some(module.as_os_str()) {
         return Err(io::Error::other(
             "migration proof artifact does not match its allowlisted path",
         )
         .into());
     }
-
-    use tinystoragedrivers_core::{
-        MemoryStorage, Precondition, Scope, StorageBackend, WriteOptions,
-        schema::delivery::MigrationDeliveryClient,
-        schema::{MigrateOptions, Registry},
-    };
-    use tinystoragedrivers_tinybus::migration::{
-        EXCHANGE_MEMBER, MIGRATION_INTERFACE, MIGRATION_OBJECT_PATH, MigrationModuleClient,
-    };
 
     let bus = tinybus::transport::memory::MemoryBus::new();
     let broker = Broker::new_restricted_module_control();
@@ -124,15 +122,25 @@ async fn verify_migration_surface(
     )?;
     host.ensure_ready(info.manifest.bus_name.as_str()).await?;
 
-    // Migration discovery is the first post-ready call. The module has not
-    // made an ordinary storage-bus lease or served a connector request yet.
     let module_peer = controller
         .name_owner(info.manifest.bus_name.as_str())
         .await?
         .ok_or_else(|| io::Error::other("compiled module has no broker owner"))?;
-    let migration = MigrationModuleClient::discover(&controller, &module_peer).await?;
-    let declaration = migration.declaration().clone();
+    // Discovery is the first post-ready call: no connector method, and thus
+    // no ordinary storage lease, has been attempted yet.
+    let migration = authorize_migration(&controller, &outsider, &module_peer).await?;
+    migrate_connector_schema(migration).await?;
 
+    broker_task.abort();
+    Ok(())
+}
+
+async fn authorize_migration(
+    controller: &Connection,
+    outsider: &Connection,
+    module_peer: &tinybus::BusName,
+) -> Result<MigrationModuleClient, Box<dyn std::error::Error>> {
+    let migration = MigrationModuleClient::discover(controller, module_peer).await?;
     let raw = controller.proxy(
         module_peer.as_str(),
         MIGRATION_OBJECT_PATH,
@@ -158,19 +166,42 @@ async fn verify_migration_surface(
     {
         return Err(io::Error::other("plain migration discovery was accepted").into());
     }
-    // This unrelated primary service remains usable after denied migration
-    // calls, and before the module connects to host storage.
     let connector = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
     let _: tinyconnectors_bus::ComposioCapabilitiesResponse = connector
         .call(names::methods::LIST_CAPABILITIES, ())
         .await?;
+    Ok(migration)
+}
 
+async fn migrate_connector_schema(
+    migration: MigrationModuleClient,
+) -> Result<(), Box<dyn std::error::Error>> {
     let backend = MemoryStorage::new();
-    let registry =
-        Registry::compose_with_declarations(std::iter::empty(), std::iter::once(declaration))?;
+    let registry = Registry::compose_with_declarations(
+        std::iter::empty(),
+        std::iter::once(migration.declaration().clone()),
+    )?;
     registry.prepare(&backend).await?;
     let scope_name = Scope::new("connectors-migration-e2e")?;
     let scoped = backend.for_scope(&scope_name)?;
+    seed_legacy_records(&scoped).await?;
+    registry
+        .migrate_with_executor(
+            &scoped,
+            &MigrateOptions::new(),
+            &MigrationDeliveryClient::new(Arc::new(migration)),
+        )
+        .await?;
+    registry.check_ready_in(&scope_name, "connectors.user_scopes")?;
+    registry.check_ready_in(&scope_name, "connectors.triggers")?;
+    verify_migrated_user_scope(&scoped).await?;
+    verify_migrated_trigger_stream(&scoped).await?;
+    Ok(())
+}
+
+async fn seed_legacy_records(
+    scoped: &tinystoragedrivers_core::ScopedStorage,
+) -> Result<(), Box<dyn std::error::Error>> {
     scoped
         .documents()
         .put_with(
@@ -191,16 +222,12 @@ async fn verify_migration_surface(
             serde_json::json!({"trigger":"daily"}),
         )
         .await?;
+    Ok(())
+}
 
-    registry
-        .migrate_with_executor(
-            &scoped,
-            &MigrateOptions::new(),
-            &MigrationDeliveryClient::new(Arc::new(migration)),
-        )
-        .await?;
-    registry.check_ready_in(&scope_name, "connectors.user_scopes")?;
-    registry.check_ready_in(&scope_name, "connectors.triggers")?;
+async fn verify_migrated_user_scope(
+    scoped: &tinystoragedrivers_core::ScopedStorage,
+) -> Result<(), Box<dyn std::error::Error>> {
     let target_id = tinystoragedrivers_core::Key::of(["gmail"])?;
     let migrated = scoped
         .documents()
@@ -220,6 +247,12 @@ async fn verify_migration_surface(
             io::Error::other("user scope migration did not preserve data and metadata").into(),
         );
     }
+    Ok(())
+}
+
+async fn verify_migrated_trigger_stream(
+    scoped: &tinystoragedrivers_core::ScopedStorage,
+) -> Result<(), Box<dyn std::error::Error>> {
     let trigger_streams = scoped.streams().streams("connectors.triggers/").await?;
     if trigger_streams != ["connectors.triggers/2026-10-21"]
         || scoped
@@ -236,8 +269,6 @@ async fn verify_migration_surface(
     {
         return Err(io::Error::other("trigger stream migration did not move its data").into());
     }
-
-    broker_task.abort();
     Ok(())
 }
 
