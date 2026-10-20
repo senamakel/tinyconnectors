@@ -53,17 +53,11 @@ impl MigrationPayloadHandler for ConnectorMigration {
                 if request.operation == USER_SCOPES_OPERATION
                     && request.version == USER_SCOPES_OPERATION_VERSION =>
             {
-                let expiries = request
-                    .records
-                    .iter()
-                    .map(|record| record.meta.expires_ms)
-                    .collect::<Vec<_>>();
                 let result = unwrap_user_scopes(request.records)
                     .map(|records| {
                         records
                             .into_iter()
-                            .zip(expiries)
-                            .map(|(record, expires_ms)| {
+                            .map(|record| {
                                 let mut target =
                                     tinystoragedrivers_tinybus::migration::TargetRecord::new(
                                         record.collection,
@@ -73,7 +67,7 @@ impl MigrationPayloadHandler for ConnectorMigration {
                                 if let Some(created_ms) = record.created_ms {
                                     target = target.created_ms(created_ms);
                                 }
-                                target.expires_ms(expires_ms)
+                                target
                             })
                             .collect()
                     })
@@ -131,12 +125,7 @@ fn invalid_transform(message: &str) -> TransformError {
 pub(super) async fn setup(context: &tinybus_module::ModuleSetupContext) -> tinybus::Result<()> {
     let declaration = declaration()?;
     validate_module_scope(&declaration)?;
-    serve_module_migration(context, declaration, Arc::new(ConnectorMigration)).await?;
-    context
-        .connection()
-        .request_name(tinystoragedrivers_tinybus::migration::MIGRATION_INTERFACE)
-        .await?;
-    Ok(())
+    serve_module_migration(context, declaration, Arc::new(ConnectorMigration)).await
 }
 
 #[cfg(test)]

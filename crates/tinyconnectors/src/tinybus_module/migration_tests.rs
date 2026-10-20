@@ -103,7 +103,7 @@ fn migration_handler_reuses_owner_transforms_and_preserves_document_history() {
     );
     assert_eq!(record.body, json!({"scopes": ["read"]}));
     assert_eq!(record.created_ms, Some(123));
-    assert_eq!(record.expires, Expiry::At(789));
+    assert_eq!(record.expires, Expiry::Carry);
 
     let reply = handler.transform(MigrationPayload::StreamPlan(StreamPlanRequest {
         operation: TRIGGERS_OPERATION.to_owned(),
