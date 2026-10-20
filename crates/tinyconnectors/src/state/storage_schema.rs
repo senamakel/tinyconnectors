@@ -86,7 +86,7 @@ pub fn storage_schema() -> Schema {
 /// corrupt rather than unset). It is carried as a wrapped `null`, which no
 /// preference type decodes, so it stays an error instead of becoming the
 /// default and silently re-enabling a write the user denied.
-pub(super) fn unwrap_user_scopes(batch: Vec<SourceRecord>) -> Result<Vec<TargetRecord>> {
+pub(crate) fn unwrap_user_scopes(batch: Vec<SourceRecord>) -> Result<Vec<TargetRecord>> {
     batch
         .into_iter()
         .map(|record| {
@@ -108,7 +108,7 @@ pub(super) fn unwrap_user_scopes(batch: Vec<SourceRecord>) -> Result<Vec<TargetR
 /// Step `triggers_rename`: `triggers/<day>` becomes `connectors.triggers/<day>`.
 /// A stream that is not under the v1 prefix is dropped, which the runner
 /// never asks for. Entries already have the v2 shape.
-pub(super) fn rename_trigger_stream(
+pub(crate) fn rename_trigger_stream(
     source: &str,
     entries: Vec<Value>,
 ) -> Option<(String, Vec<Value>)> {
