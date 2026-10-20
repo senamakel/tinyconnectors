@@ -151,3 +151,4 @@ tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }
 # vendored checkout so the module and the storage client share one `Connection`.
 [patch."https://github.com/tinyhumansai/tinybus"]
 tinybus = { path = "vendor/tinybus/crates/tinybus" }
+tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }

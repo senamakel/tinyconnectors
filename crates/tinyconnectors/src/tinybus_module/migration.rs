@@ -6,8 +6,8 @@ use tinystoragedrivers_core::schema::{
     SchemaDeclaration, TransformError, TransformErrorKind, declaration_from_schema,
 };
 use tinystoragedrivers_tinybus::migration::{
-    Expiry, MigrationPayload, MigrationPayloadHandler, MigrationPayloadReply, ScopeClass,
-    StreamMapMode, StreamPlan, TransformResult, serve_module_migration,
+    MigrationPayload, MigrationPayloadHandler, MigrationPayloadReply, ScopeClass, StreamMapMode,
+    StreamPlan, serve_module_migration,
 };
 
 use crate::state::{
@@ -52,7 +52,7 @@ impl MigrationPayloadHandler for ConnectorMigration {
                                 if let Some(created_ms) = record.created_ms {
                                     target = target.created_ms(created_ms);
                                 }
-                                target.expires(Expiry::Carry)
+                                target
                             })
                             .collect()
                     })
