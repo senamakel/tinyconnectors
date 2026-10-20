@@ -71,7 +71,7 @@ fn migration_handler_reuses_owner_transforms_and_preserves_document_history() {
     assert_eq!(records[0].id, Key::of(["gmail"]).unwrap().as_str());
     assert_eq!(records[0].body, json!({"scopes": ["read"]}));
     assert_eq!(records[0].created_ms, Some(123));
-    assert_eq!(records[0].expires, Expiry::Carry);
+    assert_eq!(records[0].expires, Expiry::At(789));
 
     let reply = handler.transform(MigrationPayload::StreamPlan(StreamPlanRequest {
         operation: TRIGGERS_OPERATION.to_owned(),

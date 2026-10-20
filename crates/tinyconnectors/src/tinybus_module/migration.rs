@@ -37,11 +37,17 @@ impl MigrationPayloadHandler for ConnectorMigration {
                 if request.operation == USER_SCOPES_OPERATION
                     && request.version == USER_SCOPES_OPERATION_VERSION =>
             {
+                let expiries = request
+                    .records
+                    .iter()
+                    .map(|record| record.meta.expires_ms)
+                    .collect::<Vec<_>>();
                 let result = unwrap_user_scopes(request.records)
                     .map(|records| {
                         records
                             .into_iter()
-                            .map(|record| {
+                            .zip(expiries)
+                            .map(|(record, expires_ms)| {
                                 let mut target =
                                     tinystoragedrivers_tinybus::migration::TargetRecord::new(
                                         record.collection,
@@ -51,7 +57,7 @@ impl MigrationPayloadHandler for ConnectorMigration {
                                 if let Some(created_ms) = record.created_ms {
                                     target = target.created_ms(created_ms);
                                 }
-                                target
+                                target.expires_ms(expires_ms)
                             })
                             .collect()
                     })
