@@ -114,6 +114,13 @@ async fn verify_migration_surface(
     broker.attach_module_controller(Arc::new(controller_transport))?;
     let controller = Connection::connect(Box::new(controller_endpoint)).await?;
     let outsider = Connection::connect(bus.connect().await?).await?;
+    let shared_interface_owner = Connection::connect(bus.connect().await?).await?;
+    shared_interface_owner
+        .request_name(MIGRATION_INTERFACE)
+        .await?;
+    let expected_shared_owner = shared_interface_owner
+        .unique_name()
+        .ok_or_else(|| io::Error::other("shared migration interface owner has no identity"))?;
     let host = ModuleHost::new(broker);
     let info = tinybus::test_support::admit_module(
         &host,
@@ -126,6 +133,12 @@ async fn verify_migration_surface(
         .name_owner(info.manifest.bus_name.as_str())
         .await?
         .ok_or_else(|| io::Error::other("compiled module has no broker owner"))?;
+    if controller.name_owner(MIGRATION_INTERFACE).await?.as_ref() != Some(&expected_shared_owner) {
+        return Err(io::Error::other(
+            "the compiled module replaced the shared migration interface owner",
+        )
+        .into());
+    }
     // Discovery is the first post-ready call: no connector method, and thus
     // no ordinary storage lease, has been attempted yet.
     let migration = authorize_migration(&controller, &outsider, &module_peer).await?;

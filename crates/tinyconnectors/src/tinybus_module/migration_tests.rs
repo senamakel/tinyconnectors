@@ -161,11 +161,12 @@ fn migration_schema_rejects_items_outside_module_scope() {
     let Some(mut declaration) = result.ok() else {
         return;
     };
-    let Some(Item::Collection { scope, .. }) = declaration.items.first_mut() else {
-        assert!(
-            false,
-            "owner declaration includes its user scope collection"
-        );
+    let scope = declaration.items.iter_mut().find_map(|item| match item {
+        Item::Collection { scope, .. } => Some(scope),
+        _ => None,
+    });
+    assert!(scope.is_some(), "owner declaration includes a collection");
+    let Some(scope) = scope else {
         return;
     };
     *scope = ScopeClass::Agent;
