@@ -13,7 +13,7 @@ use std::sync::mpsc;
 use super::{HttpTransport, check_base_url};
 use crate::Error;
 use crate::client::Transport;
-use crate::client::test_support::refused_loopback_endpoint;
+use crate::client::test_support::closed_loopback_endpoint_without_response;
 
 /// A one-request HTTP server on loopback.
 ///
@@ -285,10 +285,10 @@ async fn an_empty_200_stays_a_decode_failure() {
 }
 
 #[tokio::test]
-async fn a_refused_connection_is_a_transport_failure_naming_the_path() {
-    let (address, _rejection) = refused_loopback_endpoint();
+async fn a_connection_closed_without_a_response_is_a_transport_failure_naming_the_path() {
+    let endpoint = closed_loopback_endpoint_without_response();
 
-    let transport = HttpTransport::bearer(&format!("http://{address}"), "t").unwrap();
+    let transport = HttpTransport::bearer(&format!("http://{}", endpoint.address()), "t").unwrap();
     let error = transport.get("/anything").await.unwrap_err();
 
     assert!(matches!(error, Error::Transport { .. }));
