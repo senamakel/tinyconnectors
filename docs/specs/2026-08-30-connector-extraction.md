@@ -69,13 +69,14 @@ provides the shared `StorageNeeds` and complete `CollectionSpec` types; disablin
 its default `client` feature keeps TinyBus out of this contract's dependency
 graph.
 
-The connector module requests one `composio-user-scopes` collection with no
-indexes, TTL field, or search schema; preferences are one document per toolkit
-with a `{ "value": … }` body. It requests the `triggers/` stream prefix and no
-blob or secret prefixes. This declaration describes needs; the host still
-decides the grant and binds it to the authenticated caller. The concrete
-`tinyconnectors_bus::STORAGE_NEEDS` static lives in the contract crate, while
-the implementation re-exports that same static for its module adapters.
+The connector module requests the v2 `connectors.user_scopes` collection and
+`connectors.triggers/` stream prefix. The collection has no indexes, TTL field,
+or search schema; preferences are one document per toolkit, with object values
+stored directly and other JSON values wrapped under `non_object_value`. It
+requests no blob or secret prefixes. The contract crate's
+`tinyconnectors_bus::STORAGE_NEEDS` static declares these resources. The host
+uses that declaration as input to its grant policy and binds the selected scope
+to the authenticated caller.
 
 ### Routing is the module's job; choosing a route is the host's
 

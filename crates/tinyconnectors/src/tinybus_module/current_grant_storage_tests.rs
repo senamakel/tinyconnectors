@@ -1,3 +1,5 @@
+//! Test-only storage wrappers for current, legacy, and unknown grant checks.
+
 use super::*;
 
 use std::sync::{

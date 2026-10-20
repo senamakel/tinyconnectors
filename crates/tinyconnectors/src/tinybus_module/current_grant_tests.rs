@@ -1,3 +1,5 @@
+//! Linked module tests for access through the current TinyBus storage grants.
+
 use super::*;
 
 use std::sync::atomic::Ordering;
