@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use async_trait::async_trait;
 type RequestLog = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
 
 use tinybus::Connection;
@@ -19,11 +20,17 @@ use tinyconnectors_bus::vocabulary::{
     ActionVocabularyResponse, NormalizeIdentitiesResponse, PreparedTaskFilter, VocabularyRequest,
     VocabularyResponse,
 };
+use tinystoragedrivers_busproxy::{
+    AuditEvent, AuditSink, Environment, GovernedEndpointLimits, GovernedStorage, GrantPolicy,
+    HostContext, HostFailure, HostStorageContext, ResolvedStorage, StorageGrant,
+};
+use tinystoragedrivers_client::StorageServer;
 use tinystoragedrivers_core::{
     MemoryStorage, Precondition, Scope, StorageBackend, WriteOptions,
     schema::delivery::MigrationDeliveryClient,
     schema::{MigrateOptions, Registry},
 };
+use tinystoragedrivers_tinybus::attach_storage;
 use tinystoragedrivers_tinybus::migration::{
     EXCHANGE_MEMBER, MIGRATION_INTERFACE, MIGRATION_OBJECT_PATH, MigrationModuleClient,
 };
@@ -142,7 +149,9 @@ async fn verify_migration_surface(
     // Discovery is the first post-ready call: no connector method, and thus
     // no ordinary storage lease, has been attempted yet.
     let migration = authorize_migration(&controller, &outsider, &module_peer).await?;
-    migrate_connector_schema(migration).await?;
+    let backend = migrate_connector_schema(migration).await?;
+    verify_current_storage_after_migration(&host, &controller, &info.name, &module_peer, backend)
+        .await?;
 
     broker_task.abort();
     Ok(())
@@ -188,13 +197,13 @@ async fn authorize_migration(
 
 async fn migrate_connector_schema(
     migration: MigrationModuleClient,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let backend = MemoryStorage::new();
+) -> Result<Arc<MemoryStorage>, Box<dyn std::error::Error>> {
+    let backend = Arc::new(MemoryStorage::new());
     let registry = Registry::compose_with_declarations(
         std::iter::empty(),
         std::iter::once(migration.declaration().clone()),
     )?;
-    registry.prepare(&backend).await?;
+    registry.prepare(backend.as_ref()).await?;
     let scope_name = Scope::new("connectors-migration-e2e")?;
     let scoped = backend.for_scope(&scope_name)?;
     seed_legacy_records(&scoped).await?;
@@ -209,7 +218,208 @@ async fn migrate_connector_schema(
     registry.check_ready_in(&scope_name, "connectors.triggers")?;
     verify_migrated_user_scope(&scoped).await?;
     verify_migrated_trigger_stream(&scoped).await?;
+    Ok(backend)
+}
+
+#[derive(Debug)]
+struct ConnectorStorageProfile(&'static str);
+
+impl HostContext for ConnectorStorageProfile {}
+
+struct ConnectorStorageEnvironment {
+    backend: Arc<MemoryStorage>,
+}
+
+#[async_trait]
+impl Environment<ConnectorStorageProfile> for ConnectorStorageEnvironment {
+    async fn resolve(
+        &self,
+        context: &ConnectorStorageProfile,
+        _module: &tinybus::module::ModuleId,
+    ) -> Result<ResolvedStorage, HostFailure> {
+        let scope = Scope::new(context.0).map_err(|_| HostFailure::Denied("invalid-scope"))?;
+        let storage = self
+            .backend
+            .for_scope(&scope)
+            .map_err(|_| HostFailure::Denied("storage-unavailable"))?;
+        let grant = StorageGrant::from_needs(
+            (*tinyconnectors_bus::STORAGE_NEEDS).clone(),
+            &GrantPolicy {
+                writable: true,
+                ..GrantPolicy::default()
+            },
+        )
+        .map_err(|_| HostFailure::Denied("invalid-grant"))?;
+        Ok(ResolvedStorage {
+            backend_identity: "tinyconnectors-compiled-fixture-memory".to_owned(),
+            binding_epoch: 1,
+            canonical_scope: context.0.to_owned(),
+            grant,
+            server: Arc::new(StorageServer::new(storage)),
+        })
+    }
+
+    async fn admit_write(
+        &self,
+        _context: &ConnectorStorageProfile,
+        _module: &tinybus::module::ModuleId,
+    ) -> Result<(), HostFailure> {
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct NoAudit;
+
+impl AuditSink for NoAudit {
+    fn record(&self, _event: AuditEvent) {}
+}
+
+async fn verify_current_storage_after_migration(
+    host: &ModuleHost,
+    controller: &Connection,
+    module_name: &str,
+    module_peer: &tinybus::BusName,
+    backend: Arc<MemoryStorage>,
+) -> VerifyResult<()> {
+    let endpoint = GovernedStorage::new(
+        Arc::new(ConnectorStorageEnvironment { backend }),
+        Arc::new(NoAudit),
+        GovernedEndpointLimits::default(),
+    );
+    let registration = attach_storage(
+        host,
+        controller,
+        endpoint,
+        tokio::runtime::Handle::current(),
+    )
+    .await
+    .map_err(|_| io::Error::other("governed storage registration failed"))?;
+    let (lease_a, descriptor_a) = registration
+        .register_lease(
+            HostStorageContext::new(ConnectorStorageProfile("connectors-migration-e2e")),
+            module_peer.clone(),
+        )
+        .await
+        .map_err(|_| io::Error::other("profile A storage lease registration failed"))?;
+    let (lease_b, descriptor_b) = registration
+        .register_lease(
+            HostStorageContext::new(ConnectorStorageProfile("connectors-profile-b")),
+            module_peer.clone(),
+        )
+        .await
+        .map_err(|_| io::Error::other("profile B storage lease registration failed"))?;
+
+    host.reinitialize(module_name, json!({"storage_descriptor": descriptor_a}))
+        .await?;
+    let proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    if controller.name_owner(names::INTERFACE).await?.as_ref() != Some(module_peer) {
+        return Err(io::Error::other("module identity changed after lease setup").into());
+    }
+    verify_capability_call(&proxy).await?;
+
+    let a_scopes = scopes_over(&proxy, "connectors-a-marker", true, false, true).await?;
+    assert!(a_scopes.admin);
+    host.reinitialize(module_name, json!({"storage_descriptor": descriptor_b}))
+        .await?;
+    let b_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let b_view = get_scopes(&b_proxy, "connectors-a-marker").await?;
+    assert!(b_view.read && b_view.write && !b_view.admin);
+    let b_scopes = scopes_over(&b_proxy, "connectors-b-marker", false, true, true).await?;
+    assert!(b_scopes.admin);
+
+    host.reinitialize(module_name, json!({"storage_descriptor": descriptor_a}))
+        .await?;
+    let a_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    assert!(get_scopes(&a_proxy, "connectors-a-marker").await?.admin);
+    let b_in_a = get_scopes(&a_proxy, "connectors-b-marker").await?;
+    assert!(b_in_a.read && b_in_a.write && !b_in_a.admin);
+
+    if !registration.revoke(&lease_a).await {
+        return Err(io::Error::other("profile A lease was not revoked").into());
+    }
+    let revoked = a_proxy
+        .call::<tinyconnectors_bus::ComposioUserScopesResponse>(
+            names::methods::GET_USER_SCOPES,
+            (tinyconnectors_bus::ComposioGetUserScopesRequest {
+                toolkit: "connectors-a-marker".into(),
+            },),
+        )
+        .await;
+    if !matches!(revoked, Err(ref error) if error.to_string().contains("configured host storage lease is unavailable"))
+    {
+        return Err(io::Error::other("revoked current-only storage lease was not denied").into());
+    }
+
+    host.reinitialize(module_name, json!({"storage_descriptor": descriptor_b}))
+        .await?;
+    let b_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    assert!(get_scopes(&b_proxy, "connectors-b-marker").await?.admin);
+
+    let invalid_reinitialize = host
+        .reinitialize(
+            module_name,
+            json!({
+                "storage_descriptor": {
+                    "service_peer": ":1.999999",
+                    "registration_id": 99,
+                    "object_root": "/ai/tinyhumans/tinystorage/Leases/99"
+                }
+            }),
+        )
+        .await;
+    if invalid_reinitialize.is_ok() {
+        return Err(io::Error::other("reinitialization accepted a missing lease owner").into());
+    }
+    let still_live = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    if !get_scopes(&still_live, "connectors-b-marker").await?.admin {
+        return Err(io::Error::other("failed reinitialization replaced the live service").into());
+    }
+    assert!(registration.revoke(&lease_b).await);
     Ok(())
+}
+
+async fn verify_capability_call(proxy: &tinybus::Proxy) -> VerifyResult<()> {
+    let reply: tinyconnectors_bus::ComposioCapabilitiesResponse =
+        proxy.call(names::methods::LIST_CAPABILITIES, ()).await?;
+    if reply.capabilities.is_empty() {
+        return Err(io::Error::other("compiled module returned no capabilities").into());
+    }
+    Ok(())
+}
+
+async fn scopes_over(
+    proxy: &tinybus::Proxy,
+    toolkit: &str,
+    read: bool,
+    write: bool,
+    admin: bool,
+) -> VerifyResult<tinyconnectors_bus::ComposioUserScopes> {
+    let reply: tinyconnectors_bus::ComposioUserScopesResponse = proxy
+        .call(
+            names::methods::SET_USER_SCOPES,
+            (tinyconnectors_bus::ComposioSetUserScopesRequest {
+                toolkit: toolkit.to_owned(),
+                scopes: tinyconnectors_bus::ComposioUserScopes { read, write, admin },
+            },),
+        )
+        .await?;
+    Ok(reply.scopes)
+}
+
+async fn get_scopes(
+    proxy: &tinybus::Proxy,
+    toolkit: &str,
+) -> VerifyResult<tinyconnectors_bus::ComposioUserScopes> {
+    let reply: tinyconnectors_bus::ComposioUserScopesResponse = proxy
+        .call(
+            names::methods::GET_USER_SCOPES,
+            (tinyconnectors_bus::ComposioGetUserScopesRequest {
+                toolkit: toolkit.to_owned(),
+            },),
+        )
+        .await?;
+    Ok(reply.scopes)
 }
 
 async fn seed_legacy_records(
