@@ -341,26 +341,7 @@ async fn verify_current_storage_after_migration(
     if !registration.revoke(&lease_a).await {
         return Err(io::Error::other("profile A lease was not revoked").into());
     }
-    let revoked = a_proxy
-        .call::<tinyconnectors_bus::ComposioUserScopesResponse>(
-            names::methods::GET_USER_SCOPES,
-            (tinyconnectors_bus::ComposioGetUserScopesRequest {
-                toolkit: "connectors-a-marker".into(),
-            },),
-        )
-        .await;
-    let Err(revoked_error) = revoked else {
-        return Err(io::Error::other("revoked current-only storage lease was not denied").into());
-    };
-    if revoked_error.wire_name() != tinybus::Error::FAILED
-        || !revoked_error.to_string().contains("UnknownObject")
-        || revoked_error.to_string().contains(&service_peer_a)
-    {
-        return Err(io::Error::other(format!(
-            "revoked current-only storage lease returned an unexpected error: {revoked_error}"
-        ))
-        .into());
-    }
+    verify_revoked_profile_a_read(&a_proxy, &service_peer_a).await?;
 
     host.reinitialize(module_name, json!({"storage_descriptor": descriptor_b}))
         .await?;
@@ -459,6 +440,33 @@ async fn verify_revoked_a_reinitialization(
         return Err(io::Error::other(
             "failed reinitialization with revoked A replaced the live profile B service",
         )
+        .into());
+    }
+    Ok(())
+}
+
+async fn verify_revoked_profile_a_read(
+    proxy: &tinybus::Proxy,
+    service_peer: &str,
+) -> VerifyResult<()> {
+    let revoked = proxy
+        .call::<tinyconnectors_bus::ComposioUserScopesResponse>(
+            names::methods::GET_USER_SCOPES,
+            (tinyconnectors_bus::ComposioGetUserScopesRequest {
+                toolkit: "connectors-a-marker".into(),
+            },),
+        )
+        .await;
+    let Err(error) = revoked else {
+        return Err(io::Error::other("revoked current-only storage lease was not denied").into());
+    };
+    if error.wire_name() != tinybus::Error::FAILED
+        || !error.to_string().contains("UnknownObject")
+        || error.to_string().contains(service_peer)
+    {
+        return Err(io::Error::other(format!(
+            "revoked current-only storage lease returned an unexpected error: {error}"
+        ))
         .into());
     }
     Ok(())
