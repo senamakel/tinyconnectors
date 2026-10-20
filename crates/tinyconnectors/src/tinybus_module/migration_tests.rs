@@ -1,10 +1,9 @@
 use super::*;
 use serde_json::json;
-use tinystoragedrivers_core::schema::{Item, TransformKind};
+use tinystoragedrivers_core::schema::{Item, StreamPlanRequest, TransformKind};
 use tinystoragedrivers_core::{Key, Meta};
 use tinystoragedrivers_tinybus::migration::{
     DocumentsTransformRequest, Expiry, MigrationPayload, MigrationPayloadReply, SourceRecord,
-    StreamPlanRequest,
 };
 
 #[test]
