@@ -1171,6 +1171,7 @@ fn to_bus_error(error: &crate::Error) -> tinybus::Error {
     tinybus::Error::failed(error.to_string())
 }
 
+#[cfg(test)]
 async fn setup(connection: Connection, config: ModuleConfig) -> TinyBusResult<()> {
     let storage = storage::StorageLink::new(connection.clone(), config.storage_descriptor.clone());
     storage

@@ -9,6 +9,7 @@ use std::thread;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use serde_json::{Value, json};
 type RequestLog = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
 
 use tinybus::Connection;
@@ -34,6 +35,8 @@ use tinystoragedrivers_tinybus::attach_storage;
 use tinystoragedrivers_tinybus::migration::{
     EXCHANGE_MEMBER, MIGRATION_INTERFACE, MIGRATION_OBJECT_PATH, MigrationModuleClient,
 };
+
+type VerifyResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 /// Verify classic behavior and then restricted behavior in a fresh process.
 #[tokio::main]
