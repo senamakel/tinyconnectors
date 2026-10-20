@@ -349,9 +349,17 @@ async fn verify_current_storage_after_migration(
             },),
         )
         .await;
-    if !matches!(revoked, Err(ref error) if error.to_string().contains("configured host storage lease is unavailable"))
-    {
+    let Err(revoked_error) = revoked else {
         return Err(io::Error::other("revoked current-only storage lease was not denied").into());
+    };
+    if !revoked_error
+        .to_string()
+        .contains("configured host storage lease is unavailable")
+    {
+        return Err(io::Error::other(format!(
+            "revoked current-only storage lease returned an unexpected denial: {revoked_error}"
+        ))
+        .into());
     }
 
     host.reinitialize(module_name, json!({"storage_descriptor": descriptor_b}))
