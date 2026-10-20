@@ -305,6 +305,7 @@ async fn verify_current_storage_after_migration(
         )
         .await
         .map_err(|_| io::Error::other("profile A storage lease registration failed"))?;
+    let service_peer_a = descriptor_a.service_peer().to_owned();
     let (lease_b, descriptor_b) = registration
         .register_lease(
             HostStorageContext::new(ConnectorStorageProfile("connectors-profile-b")),
@@ -352,12 +353,12 @@ async fn verify_current_storage_after_migration(
     let Err(revoked_error) = revoked else {
         return Err(io::Error::other("revoked current-only storage lease was not denied").into());
     };
-    if !revoked_error
-        .to_string()
-        .contains("configured host storage lease is unavailable")
+    if revoked_error.wire_name() != tinybus::Error::FAILED
+        || !revoked_error.to_string().contains("UnknownObject")
+        || revoked_error.to_string().contains(&service_peer_a)
     {
         return Err(io::Error::other(format!(
-            "revoked current-only storage lease returned an unexpected denial: {revoked_error}"
+            "revoked current-only storage lease returned an unexpected error: {revoked_error}"
         ))
         .into());
     }
