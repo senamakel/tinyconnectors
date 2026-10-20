@@ -410,7 +410,9 @@ async fn verify_served_surface(
         .get(1)
         .is_none_or(|migration| !migration.methods.is_empty())
     {
-        return Err(io::Error::other("migration members leaked into the secondary interface").into());
+        return Err(
+            io::Error::other("migration members leaked into the secondary interface").into(),
+        );
     }
     let declared: Vec<String> = info
         .manifest

@@ -3,12 +3,11 @@
 use std::sync::Arc;
 
 use tinystoragedrivers_core::schema::{
-    SchemaDeclaration, StreamMapMode, StreamPlan, TransformError, TransformErrorKind,
-    declaration_from_schema,
+    Schema, SchemaDeclaration, ScopeClass, StreamMapMode, StreamPlan, TransformError,
+    TransformErrorKind, declaration_from_schema,
 };
 use tinystoragedrivers_tinybus::migration::{
-    MigrationPayload, MigrationPayloadHandler, MigrationPayloadReply, ScopeClass,
-    serve_module_migration,
+    MigrationPayload, MigrationPayloadHandler, MigrationPayloadReply, serve_module_migration,
 };
 
 use crate::state::{
@@ -17,7 +16,11 @@ use crate::state::{
 };
 
 fn declaration() -> tinybus::Result<SchemaDeclaration> {
-    declaration_from_schema(&storage_schema(), |step| match step.id {
+    schema_declaration(&storage_schema())
+}
+
+fn schema_declaration(schema: &Schema) -> tinybus::Result<SchemaDeclaration> {
+    declaration_from_schema(schema, |step| match step.id {
         "user_scopes_unwrap_value" => Some((
             USER_SCOPES_OPERATION.to_owned(),
             USER_SCOPES_OPERATION_VERSION,
@@ -26,6 +29,19 @@ fn declaration() -> tinybus::Result<SchemaDeclaration> {
         _ => None,
     })
     .map_err(|_| tinybus::Error::failed("connector migration declaration is invalid"))
+}
+
+fn validate_module_scope(declaration: &SchemaDeclaration) -> tinybus::Result<()> {
+    if declaration
+        .items
+        .iter()
+        .any(|item| item.scope() != ScopeClass::Module)
+    {
+        return Err(tinybus::Error::failed(
+            "connector migration schema contains a non-module item",
+        ));
+    }
+    Ok(())
 }
 
 struct ConnectorMigration;
@@ -114,15 +130,7 @@ fn invalid_transform(message: &str) -> TransformError {
 
 pub(super) async fn setup(context: &tinybus_module::ModuleSetupContext) -> tinybus::Result<()> {
     let declaration = declaration()?;
-    if declaration
-        .items
-        .iter()
-        .any(|item| item.scope() != ScopeClass::Module)
-    {
-        return Err(tinybus::Error::failed(
-            "connector migration schema contains a non-module item",
-        ));
-    }
+    validate_module_scope(&declaration)?;
     serve_module_migration(context, declaration, Arc::new(ConnectorMigration)).await?;
     context
         .connection()

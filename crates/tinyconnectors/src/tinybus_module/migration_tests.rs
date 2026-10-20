@@ -1,6 +1,9 @@
 use super::*;
 use serde_json::json;
-use tinystoragedrivers_core::schema::{Item, StreamPlanRequest, TransformKind};
+use tinystoragedrivers_core::schema::{
+    BlobTargetRequest, Item, ScopeClass, Step, StreamEntriesRequest, StreamPlanRequest,
+    TransformKind,
+};
 use tinystoragedrivers_core::{Key, Meta};
 use tinystoragedrivers_tinybus::migration::{
     DocumentsTransformRequest, Expiry, MigrationPayload, MigrationPayloadReply, SourceRecord,
@@ -137,4 +140,106 @@ fn migration_handler_rejects_unknown_operations_and_versions() {
             ..
         }))
     ));
+}
+
+#[test]
+fn newly_added_schema_steps_require_an_explicit_external_operation_mapping() {
+    let schema = storage_schema().step(Step::new(
+        "new_step_without_operation",
+        "connectors.user_scopes",
+        2,
+        3,
+        |_records| Ok(Vec::new()),
+    ));
+    assert!(schema_declaration(&schema).is_err());
+}
+
+#[test]
+fn migration_schema_rejects_items_outside_module_scope() {
+    let result = declaration();
+    assert!(result.is_ok());
+    let Some(mut declaration) = result.ok() else {
+        return;
+    };
+    let Some(Item::Collection { scope, .. }) = declaration.items.first_mut() else {
+        assert!(
+            false,
+            "owner declaration includes its user scope collection"
+        );
+        return;
+    };
+    *scope = ScopeClass::Agent;
+    assert!(validate_module_scope(&declaration).is_err());
+}
+
+#[test]
+fn migration_handler_rejects_bad_document_ids_and_unknown_payload_operations() {
+    let handler = ConnectorMigration;
+    let document_reply =
+        handler.transform(MigrationPayload::Documents(DocumentsTransformRequest {
+            operation: USER_SCOPES_OPERATION.to_owned(),
+            version: USER_SCOPES_OPERATION_VERSION,
+            records: vec![SourceRecord {
+                id: String::new(),
+                body: json!({"value": {}}),
+                meta: Meta::default(),
+            }],
+        }));
+    assert!(matches!(
+        document_reply,
+        MigrationPayloadReply::Documents(Err(TransformError {
+            kind: TransformErrorKind::InvalidInput,
+            ..
+        }))
+    ));
+
+    let document_reply =
+        handler.transform(MigrationPayload::Documents(DocumentsTransformRequest {
+            operation: "unknown.document.operation".to_owned(),
+            version: 1,
+            records: Vec::new(),
+        }));
+    assert!(matches!(
+        document_reply,
+        MigrationPayloadReply::Documents(Err(TransformError {
+            kind: TransformErrorKind::UnsupportedOperation,
+            ..
+        }))
+    ));
+
+    let blob_reply = handler.transform(MigrationPayload::BlobTarget(BlobTargetRequest {
+        operation: "unknown.blob.operation".to_owned(),
+        version: 1,
+        source: "unused".to_owned(),
+    }));
+    assert!(matches!(
+        blob_reply,
+        MigrationPayloadReply::BlobTarget(Err(TransformError {
+            kind: TransformErrorKind::UnsupportedOperation,
+            ..
+        }))
+    ));
+
+    let entries_reply = handler.transform(MigrationPayload::StreamEntries(StreamEntriesRequest {
+        operation: "unknown.stream.operation".to_owned(),
+        version: 1,
+        entries: Vec::new(),
+    }));
+    assert!(matches!(
+        entries_reply,
+        MigrationPayloadReply::StreamEntries(Err(TransformError {
+            kind: TransformErrorKind::UnsupportedOperation,
+            ..
+        }))
+    ));
+}
+
+#[test]
+fn unrelated_stream_sources_are_skipped_by_the_owner_mapping() {
+    let reply = ConnectorMigration.transform(MigrationPayload::StreamPlan(StreamPlanRequest {
+        operation: TRIGGERS_OPERATION.to_owned(),
+        version: TRIGGERS_OPERATION_VERSION,
+        source: "events/2026-10-21".to_owned(),
+    }));
+    assert!(matches!(reply, MigrationPayloadReply::StreamPlan(Ok(None))));
 }
