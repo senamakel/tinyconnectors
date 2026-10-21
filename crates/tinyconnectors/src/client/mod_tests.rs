@@ -12,12 +12,14 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::sync::{Arc, Mutex};
+use std::io::Cursor;
 
 use async_trait::async_trait;
 use serde_json::json;
 
 use super::{ComposioClient, ProxyRoute, Transport};
 use crate::{Error, Result};
+use crate::client::test_support::read_request_from;
 
 /// One recorded request.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -502,4 +504,15 @@ async fn reports_an_unexpected_envelope_as_a_decode_failure() {
             .contains("/agent-integrations/composio/connections"),
         "the failing path belongs in the message: {error}"
     );
+}
+
+#[test]
+fn mock_server_drains_declared_request_bodies_before_replying() {
+    let wire = b"POST /execute HTTP/1.1\r\nContent-Length: 7\r\n\r\n{\"x\":1}";
+    let mut reader = Cursor::new(wire);
+
+    let head = read_request_from(&mut reader).unwrap();
+
+    assert!(head.starts_with("POST /execute HTTP/1.1\r\n"));
+    assert_eq!(reader.position(), wire.len() as u64);
 }

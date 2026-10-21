@@ -9,7 +9,7 @@
     clippy::format_push_string
 )]
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -72,7 +72,9 @@ pub(crate) fn server(
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(stream) = stream else { return };
-            let head = read_head(&stream);
+            // Drain request bodies before replying. Closing a TCP stream with
+            // unread POST bytes can reset the response on Windows.
+            let head = read_request(&stream).unwrap_or_default();
             if head.is_empty() {
                 continue;
             }
@@ -94,10 +96,45 @@ pub(crate) fn server(
 
 pub(crate) fn read_head(stream: &TcpStream) -> String {
     let mut reader = BufReader::new(stream);
+    read_head_from(&mut reader).unwrap_or_default()
+}
+
+fn read_request(stream: &TcpStream) -> io::Result<String> {
+    let mut reader = BufReader::new(stream);
+    read_request_from(&mut reader)
+}
+
+pub(crate) fn read_request_from(reader: &mut impl BufRead) -> io::Result<String> {
+    let head = read_head_from(reader)?;
+    if head.is_empty() {
+        return Ok(head);
+    }
+
+    let content_length = head.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("content-length")
+            .then(|| value.trim().parse::<usize>().ok())
+            .flatten()
+    });
+    if let Some(length) = content_length {
+        let drained = (&mut *reader)
+            .take(length as u64)
+            .copy(&mut io::sink())?;
+        if drained != length as u64 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "request ended before its declared body length",
+            ));
+        }
+    }
+    Ok(head)
+}
+
+fn read_head_from(reader: &mut impl BufRead) -> io::Result<String> {
     let mut head = String::new();
     loop {
         let mut line = String::new();
-        if reader.read_line(&mut line).unwrap_or(0) == 0 {
+        if reader.read_line(&mut line)? == 0 {
             break;
         }
         let blank = line == "\r\n";
@@ -106,7 +143,7 @@ pub(crate) fn read_head(stream: &TcpStream) -> String {
             break;
         }
     }
-    head
+    Ok(head)
 }
 
 pub(crate) fn json(body: &str) -> Reply {
