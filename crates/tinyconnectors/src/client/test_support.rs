@@ -117,9 +117,10 @@ pub(crate) fn read_request_from(reader: &mut impl BufRead) -> io::Result<String>
             .flatten()
     });
     if let Some(length) = content_length {
-        let drained = (&mut *reader)
-            .take(length as u64)
-            .copy(&mut io::sink())?;
+        let drained = io::copy(
+            &mut (&mut *reader).take(length as u64),
+            &mut io::sink(),
+        )?;
         if drained != length as u64 {
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
