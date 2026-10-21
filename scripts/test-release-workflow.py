@@ -14,9 +14,9 @@ REVIEWED_RELEASE_PIN = "6ed83b04aab2d8977ec62e966cb914531e534fa4"
 LEGACY_RELEASE_PIN = "4adc1080fb495098e7af1aade82ed7e6e3c69bb7"
 TSD_RELEASE = "1.9.0"
 TSD_REV = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b"
-TINYBUS_VERSION = "0.3.11"
-TINYBUS_MODULE_VERSION = "0.3.11"
-TINYBUS_REV = "9e14f65666b11782ec1054aba576114026d180f8"
+TINYBUS_VERSION = "0.3.12"
+TINYBUS_MODULE_VERSION = "0.3.12"
+TINYBUS_REV = "34d3bd6dda099e54cee11a2f96f28a21da9e0759"
 
 
 def resolve_script(workflow):
@@ -155,7 +155,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         manifest = (ROOT / "Cargo.toml").read_text()
         self.assertEqual(
             tomllib.loads(manifest)["workspace"]["package"]["version"],
-            "0.21.1",
+            "0.21.2",
         )
         self.assertIn(
             'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
@@ -167,8 +167,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
                        if package["name"] == "tinystoragedrivers-bus")
         self.assertEqual(tsd_bus["version"], TSD_RELEASE)
         self.assertIn(f"rev={TSD_REV}#", tsd_bus["source"])
-        self.assertRegex(manifest, rf'(?m)^tinybus = \{{ version = "{re.escape(TINYBUS_VERSION)}",')
-        self.assertRegex(manifest, rf'(?m)^tinybus-module = "{re.escape(TINYBUS_MODULE_VERSION)}"$')
+        self.assertRegex(manifest, rf'(?m)^tinybus = \{{ version = "={re.escape(TINYBUS_VERSION)}",')
+        self.assertRegex(manifest, rf'(?m)^tinybus-module = "={re.escape(TINYBUS_MODULE_VERSION)}"$')
         self.assertIn(
             '[patch.crates-io]\ntinybus = { path = "vendor/tinybus/crates/tinybus" }\n'
             'tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }',

@@ -1350,7 +1350,7 @@ dependencies = [
 
 [[package]]
 name = "tinybus"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "async-trait",
  "flate2",
@@ -1373,7 +1373,7 @@ dependencies = [
 
 [[package]]
 name = "tinybus-macros"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1382,7 +1382,7 @@ dependencies = [
 
 [[package]]
 name = "tinybus-module"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "async-trait",
  "serde",
@@ -1394,7 +1394,7 @@ dependencies = [
 
 [[package]]
 name = "tinyconnectors"
-version = "0.21.1"
+version = "0.21.2"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "tinyconnectors-bus"
-version = "0.21.1"
+version = "0.21.2"
 dependencies = [
  "base64",
  "hmac",
@@ -1432,7 +1432,7 @@ dependencies = [
 
 [[package]]
 name = "tinyconnectors-sync"
-version = "0.21.1"
+version = "0.21.2"
 dependencies = [
  "async-trait",
  "serde",

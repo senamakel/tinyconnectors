@@ -18,7 +18,7 @@ exclude = ["vendor", "worktrees", "proof-workspaces/storage-needs"]
 # true`, so a reviewed release version bump is written in exactly one place
 # and every crate moves together.
 [workspace.package]
-version = "0.21.1"
+version = "0.21.2"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-only"
@@ -39,15 +39,15 @@ tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedri
 # answered from what the registered providers know. It stays a separate crate so
 # it keeps its own dependency rules — no transport, no storage engine.
 tinyconnectors-sync = { path = "crates/tinyconnectors-sync" }
-# TinyBus 0.3.11 matches the published SDK selected for the host native module
+# TinyBus 0.3.12 matches the selected SDK for the host native module
 # runtime. Socket and CLI features are unnecessary here.
-tinybus = { version = "0.3.11", default-features = false, features = [
+tinybus = { version = "=0.3.12", default-features = false, features = [
     "macros",
     "modules",
 ] }
 # The module-side SDK owns the isolated runtime and exports the ABI entrypoints
 # required by TinyBus's dynamic loader.
-tinybus-module = "0.3.11"
+tinybus-module = "=0.3.12"
 
 # Derive macros for the crate-wide error type in `crates/tinyconnectors/src/error/`.
 # Every dependency entry should carry a comment like this one saying why it is
