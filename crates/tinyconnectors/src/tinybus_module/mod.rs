@@ -1358,3 +1358,7 @@ impl std::fmt::Debug for RouteConfig {
 #[cfg(test)]
 #[path = "contracts_tests.rs"]
 mod contracts_test;
+
+#[cfg(test)]
+#[path = "startup_tests.rs"]
+mod startup_test;
