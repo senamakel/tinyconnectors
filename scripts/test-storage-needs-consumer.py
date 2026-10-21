@@ -156,9 +156,9 @@ class StorageNeedsConsumerTests(unittest.TestCase):
 
     def test_rejects_tinyconnectors_implementation_dependency(self):
         metadata = good_metadata()
-        add_dependency(metadata, "path#tinyconnectors@0.21.0", "tinyconnectors")
+        add_dependency(metadata, "path#tinyconnectors@0.21.1", "tinyconnectors")
         with self.assertRaisesRegex(ProofError, "forbidden packages: tinyconnectors"):
-            validate_consumer_graph(metadata, good_tree() + "tinyconnectors v0.21.0\n")
+            validate_consumer_graph(metadata, good_tree() + "tinyconnectors v0.21.1\n")
 
     def test_rejects_async_runtime_dependency(self):
         metadata = good_metadata()
