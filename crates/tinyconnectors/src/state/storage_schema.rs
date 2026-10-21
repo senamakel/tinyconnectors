@@ -32,6 +32,15 @@ use tinyconnectors_bus::storage::{
 /// The owner prefix every v2 name of this module starts with.
 const OWNER: &str = "connectors";
 
+/// Stable owner operation selector for the preferences document transform.
+pub(crate) const USER_SCOPES_OPERATION: &str = "tinyconnectors.user_scopes_unwrap_value";
+/// Stable owner operation selector for the trigger stream mapping.
+pub(crate) const TRIGGERS_OPERATION: &str = "tinyconnectors.triggers_rename";
+/// Current wire contract version for the preferences document transform.
+pub(crate) const USER_SCOPES_OPERATION_VERSION: u32 = 1;
+/// Current wire contract version for the trigger stream mapping.
+pub(crate) const TRIGGERS_OPERATION_VERSION: u32 = 1;
+
 /// A finished day's stream is sealed once it has been idle this long. Nothing
 /// appends to a day after its UTC midnight, so two days is a wide margin.
 const DAY_STREAM_IDLE_MS: u64 = 2 * 24 * 60 * 60 * 1000;
@@ -77,7 +86,7 @@ pub fn storage_schema() -> Schema {
 /// corrupt rather than unset). It is carried as a wrapped `null`, which no
 /// preference type decodes, so it stays an error instead of becoming the
 /// default and silently re-enabling a write the user denied.
-fn unwrap_user_scopes(batch: Vec<SourceRecord>) -> Result<Vec<TargetRecord>> {
+pub(crate) fn unwrap_user_scopes(batch: Vec<SourceRecord>) -> Result<Vec<TargetRecord>> {
     batch
         .into_iter()
         .map(|record| {
@@ -99,7 +108,10 @@ fn unwrap_user_scopes(batch: Vec<SourceRecord>) -> Result<Vec<TargetRecord>> {
 /// Step `triggers_rename`: `triggers/<day>` becomes `connectors.triggers/<day>`.
 /// A stream that is not under the v1 prefix is dropped, which the runner
 /// never asks for. Entries already have the v2 shape.
-fn rename_trigger_stream(source: &str, entries: Vec<Value>) -> Option<(String, Vec<Value>)> {
+pub(crate) fn rename_trigger_stream(
+    source: &str,
+    entries: Vec<Value>,
+) -> Option<(String, Vec<Value>)> {
     let day = source.strip_prefix(LEGACY_STREAM_PREFIX)?;
     Some((format!("{STREAM_PREFIX}{day}"), entries))
 }

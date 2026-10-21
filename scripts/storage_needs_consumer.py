@@ -13,13 +13,13 @@ from typing import Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_SOURCE = (
     "git+https://github.com/tinyhumansai/tinystoragedrivers"
-    "?rev=c9ea6ff1615b77b55d7269403af5fd11bedc9ce8"
-    "#c9ea6ff1615b77b55d7269403af5fd11bedc9ce8"
+    "?rev=a04e3a174fa8f28d5229a816ca6b39c72a9efd7b"
+    "#a04e3a174fa8f28d5229a816ca6b39c72a9efd7b"
 )
 EXPECTED_CONTRACT_VERSION = tomllib.loads((ROOT / "Cargo.toml").read_text())[
     "workspace"
 ]["package"]["version"]
-EXPECTED_STORAGE_BUS_VERSION = "1.5.0"
+EXPECTED_STORAGE_BUS_VERSION = "1.9.0"
 EXPECTED_STORAGE_NEEDS_CRATE = "tinystoragedrivers-bus"
 EXPECTED_PROOF_PACKAGE = "tinyconnectors-storage-needs-consumer-proof"
 EXPECTED_TREE_PACKAGES = {
@@ -205,9 +205,9 @@ def validate_consumer_graph(metadata: dict[str, object], tree: str) -> None:
         raise _error("the canonical storage bus package is missing or duplicated")
     storage_id, storage_package = storage_packages[0]
     if storage_package.get("version") != EXPECTED_STORAGE_BUS_VERSION:
-        raise _error("the canonical storage bus package version is not 1.5.0")
+        raise _error("the canonical storage bus package version does not match the pin")
     if storage_package.get("source") != EXPECTED_SOURCE:
-        raise _error("the canonical storage bus source is not the pinned v1.5.0 commit")
+        raise _error("the canonical storage bus source is not the pinned commit")
 
     root_deps = root_node.get("deps")
     if not isinstance(root_deps, list):

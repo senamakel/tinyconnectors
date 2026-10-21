@@ -10,12 +10,54 @@
 )]
 
 use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 /// What a server answers: status line, extra headers, body.
 pub(crate) type Reply = (u16, Vec<(&'static str, String)>, String);
+
+/// A reserved loopback endpoint whose first connection closes without an HTTP response.
+pub(crate) struct NoResponseEndpoint {
+    address: SocketAddr,
+    _listener: TcpListener,
+    rejection: Option<std::thread::JoinHandle<()>>,
+}
+
+impl NoResponseEndpoint {
+    pub(crate) fn address(&self) -> SocketAddr {
+        self.address
+    }
+}
+
+impl Drop for NoResponseEndpoint {
+    fn drop(&mut self) {
+        if let Some(rejection) = self.rejection.take() {
+            if !rejection.is_finished() {
+                let _ = TcpStream::connect(self.address);
+            }
+            let _ = rejection.join();
+        }
+    }
+}
+
+/// Keep the destination port occupied through the request, then close its
+/// first connection without an HTTP response.
+pub(crate) fn closed_loopback_endpoint_without_response() -> NoResponseEndpoint {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let acceptor = listener.try_clone().unwrap();
+    let rejection = std::thread::spawn(move || {
+        if let Ok((stream, _)) = acceptor.accept() {
+            drop(stream);
+        }
+    });
+    NoResponseEndpoint {
+        address,
+        _listener: listener,
+        rejection: Some(rejection),
+    }
+}
 
 /// A loopback HTTP server answering every request with `respond(request_head)`.
 ///

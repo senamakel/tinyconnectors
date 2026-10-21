@@ -4,19 +4,39 @@ use std::io;
 use std::io::{BufRead, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use async_trait::async_trait;
+use serde_json::json;
 type RequestLog = std::sync::Arc<std::sync::Mutex<Vec<String>>>;
 
 use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::{ModuleHost, ModuleInfo};
+use tinybus::transport::memory::MemoryTransport;
 use tinyconnectors::names;
 use tinyconnectors_bus::vocabulary::{
     ActionVocabularyResponse, NormalizeIdentitiesResponse, PreparedTaskFilter, VocabularyRequest,
     VocabularyResponse,
 };
+use tinystoragedrivers_busproxy::{
+    AuditEvent, AuditSink, Environment, GovernedEndpointLimits, GovernedStorage, GrantPolicy,
+    HostContext, HostFailure, HostStorageContext, ResolvedStorage, StorageGrant,
+};
+use tinystoragedrivers_client::StorageServer;
+use tinystoragedrivers_core::{
+    MemoryStorage, Precondition, Scope, StorageBackend, WriteOptions,
+    schema::delivery::MigrationDeliveryClient,
+    schema::{MigrateOptions, Registry},
+};
+use tinystoragedrivers_tinybus::attach_storage;
+use tinystoragedrivers_tinybus::migration::{
+    EXCHANGE_MEMBER, MIGRATION_INTERFACE, MIGRATION_OBJECT_PATH, MigrationModuleClient,
+};
+
+type VerifyResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 /// Verify classic behavior and then restricted behavior in a fresh process.
 #[tokio::main]
@@ -26,7 +46,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         verify_restricted_surface(&module).await?;
         return Ok(());
     }
-    let (module_host, client, broker_task) = tinybus::test_support::start_bus().await?;
+    if std::env::args().nth(2).as_deref() == Some("--migration") {
+        verify_migration_surface(&module).await?;
+        return Ok(());
+    }
+    if std::env::args().nth(2).as_deref() == Some("--unselected-migration") {
+        verify_unselected_migration_fails_closed().await?;
+        return Ok(());
+    }
+    let (module_host, client, broker_task) = start_selected_bus().await?;
     let info = tinybus::test_support::admit_module(
         &module_host,
         "TINYCONNECTORS_TEST_MODULE",
@@ -56,6 +84,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !status.success() {
         return Err(io::Error::other("restricted module verification failed").into());
     }
+    for mode in ["--migration", "--unselected-migration"] {
+        let status = std::process::Command::new(std::env::current_exe()?)
+            .arg(&module)
+            .arg(mode)
+            .status()?;
+        if !status.success() {
+            return Err(io::Error::other(format!(
+                "compiled module verification failed for {mode}"
+            ))
+            .into());
+        }
+    }
 
     println!(
         "verified {} as TinyBus module `{}`",
@@ -66,13 +106,516 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Discover and run the owner migration through the compiled module artifact.
+async fn verify_migration_surface(
+    module: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var_os("TINYCONNECTORS_TEST_MODULE").as_deref() != Some(module.as_os_str()) {
+        return Err(io::Error::other(
+            "migration proof artifact does not match its allowlisted path",
+        )
+        .into());
+    }
+
+    let bus = tinybus::transport::memory::MemoryBus::new();
+    let broker = Broker::new_restricted_module_control();
+    let broker_task = broker.clone().spawn(bus.clone());
+    let (controller_transport, controller_endpoint) = MemoryTransport::pair();
+    broker.attach_module_controller(Arc::new(controller_transport))?;
+    let controller = Connection::connect(Box::new(controller_endpoint)).await?;
+    let outsider = Connection::connect(bus.connect().await?).await?;
+    let shared_interface_owner = Connection::connect(bus.connect().await?).await?;
+    shared_interface_owner
+        .request_name(MIGRATION_INTERFACE)
+        .await?;
+    let expected_shared_owner = shared_interface_owner
+        .unique_name()
+        .ok_or_else(|| io::Error::other("shared migration interface owner has no identity"))?;
+    let host = ModuleHost::new(broker);
+    let info = tinybus::test_support::admit_module(
+        &host,
+        "TINYCONNECTORS_TEST_MODULE",
+        env!("CARGO_PKG_NAME"),
+    )?;
+    host.ensure_ready(info.manifest.bus_name.as_str()).await?;
+
+    let module_peer = controller
+        .name_owner(info.manifest.bus_name.as_str())
+        .await?
+        .ok_or_else(|| io::Error::other("compiled module has no broker owner"))?;
+    if controller.name_owner(MIGRATION_INTERFACE).await?.as_ref() != Some(&expected_shared_owner) {
+        return Err(io::Error::other(
+            "the compiled module replaced the shared migration interface owner",
+        )
+        .into());
+    }
+    // Discovery is the first post-ready call: no connector method, and thus
+    // no ordinary storage lease, has been attempted yet.
+    let migration = authorize_migration(&controller, &outsider, &module_peer).await?;
+    let backend = migrate_connector_schema(migration).await?;
+    verify_current_storage_after_migration(&host, &controller, &info.name, &module_peer, backend)
+        .await?;
+
+    broker_task.abort();
+    Ok(())
+}
+
+async fn authorize_migration(
+    controller: &Connection,
+    outsider: &Connection,
+    module_peer: &tinybus::BusName,
+) -> Result<MigrationModuleClient, Box<dyn std::error::Error>> {
+    let migration = MigrationModuleClient::discover(controller, module_peer).await?;
+    let raw = controller.proxy(
+        module_peer.as_str(),
+        MIGRATION_OBJECT_PATH,
+        MIGRATION_INTERFACE,
+    )?;
+    let outsider_proxy = outsider.proxy(
+        module_peer.as_str(),
+        MIGRATION_OBJECT_PATH,
+        MIGRATION_INTERFACE,
+    )?;
+    let unauthorized = outsider_proxy
+        .call_confidential::<serde_json::Value>(EXCHANGE_MEMBER, serde_json::json!(17))
+        .await;
+    if !matches!(unauthorized, Err(error) if error.to_string().contains("migration authority unavailable"))
+    {
+        return Err(io::Error::other(
+            "malformed migration request was not denied by authority first",
+        )
+        .into());
+    }
+    let plain = raw.call::<serde_json::Value>("GetSchema", ()).await;
+    if !matches!(plain, Err(error) if error.wire_name() == tinybus::Error::CONFIDENTIALITY_REQUIRED)
+    {
+        return Err(io::Error::other("plain migration discovery was accepted").into());
+    }
+    let connector = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let _: tinyconnectors_bus::ComposioCapabilitiesResponse = connector
+        .call(names::methods::LIST_CAPABILITIES, ())
+        .await?;
+    Ok(migration)
+}
+
+async fn migrate_connector_schema(
+    migration: MigrationModuleClient,
+) -> Result<Arc<MemoryStorage>, Box<dyn std::error::Error>> {
+    let backend = Arc::new(MemoryStorage::new());
+    let registry = Registry::compose_with_declarations(
+        std::iter::empty(),
+        std::iter::once(migration.declaration().clone()),
+    )?;
+    registry.prepare(backend.as_ref()).await?;
+    let scope_name = Scope::new("connectors-migration-e2e")?;
+    let scoped = backend.for_scope(&scope_name)?;
+    seed_legacy_records(&scoped).await?;
+    registry
+        .migrate_with_executor(
+            &scoped,
+            &MigrateOptions::new(),
+            &MigrationDeliveryClient::new(Arc::new(migration)),
+        )
+        .await?;
+    registry.check_ready_in(&scope_name, "connectors.user_scopes")?;
+    registry.check_ready_in(&scope_name, "connectors.triggers")?;
+    verify_migrated_user_scope(&scoped).await?;
+    verify_migrated_trigger_stream(&scoped).await?;
+    Ok(backend)
+}
+
+#[derive(Debug)]
+struct ConnectorStorageProfile(&'static str);
+
+impl HostContext for ConnectorStorageProfile {}
+
+struct ConnectorStorageEnvironment {
+    backend: Arc<MemoryStorage>,
+}
+
+#[async_trait]
+impl Environment<ConnectorStorageProfile> for ConnectorStorageEnvironment {
+    async fn resolve(
+        &self,
+        context: &ConnectorStorageProfile,
+        _module: &tinybus::module::ModuleId,
+    ) -> Result<ResolvedStorage, HostFailure> {
+        let scope = Scope::new(context.0).map_err(|_| HostFailure::Denied("invalid-scope"))?;
+        let storage = self
+            .backend
+            .for_scope(&scope)
+            .map_err(|_| HostFailure::Denied("storage-unavailable"))?;
+        let grant = StorageGrant::from_needs(
+            *tinyconnectors_bus::STORAGE_NEEDS,
+            &GrantPolicy {
+                writable: true,
+                ..GrantPolicy::default()
+            },
+        )
+        .map_err(|_| HostFailure::Denied("invalid-grant"))?;
+        Ok(ResolvedStorage {
+            backend_identity: "tinyconnectors-compiled-fixture-memory".to_owned(),
+            binding_epoch: 1,
+            canonical_scope: context.0.to_owned(),
+            grant,
+            server: Arc::new(StorageServer::new(storage)),
+        })
+    }
+
+    async fn admit_write(
+        &self,
+        _context: &ConnectorStorageProfile,
+        _module: &tinybus::module::ModuleId,
+    ) -> Result<(), HostFailure> {
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct NoAudit;
+
+impl AuditSink for NoAudit {
+    fn record(&self, _event: AuditEvent) {}
+}
+
+async fn verify_current_storage_after_migration(
+    host: &ModuleHost,
+    controller: &Connection,
+    module_name: &str,
+    module_peer: &tinybus::BusName,
+    backend: Arc<MemoryStorage>,
+) -> VerifyResult<()> {
+    let endpoint = GovernedStorage::new(
+        Arc::new(ConnectorStorageEnvironment { backend }),
+        Arc::new(NoAudit),
+        GovernedEndpointLimits::default(),
+    );
+    let registration = attach_storage(
+        host,
+        controller,
+        endpoint,
+        tokio::runtime::Handle::current(),
+    )
+    .await
+    .map_err(|_| io::Error::other("governed storage registration failed"))?;
+    let (lease_a, descriptor_a) = registration
+        .register_lease(
+            HostStorageContext::new(ConnectorStorageProfile("connectors-migration-e2e")),
+            module_peer.clone(),
+        )
+        .await
+        .map_err(|_| io::Error::other("profile A storage lease registration failed"))?;
+    let service_peer_a = descriptor_a.service_peer().to_owned();
+    let (lease_b, descriptor_b) = registration
+        .register_lease(
+            HostStorageContext::new(ConnectorStorageProfile("connectors-profile-b")),
+            module_peer.clone(),
+        )
+        .await
+        .map_err(|_| io::Error::other("profile B storage lease registration failed"))?;
+
+    host.reinitialize(
+        module_name,
+        json!({"storage_descriptor": descriptor_a.clone()}),
+    )
+    .await?;
+    let proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    if controller.name_owner(names::INTERFACE).await?.as_ref() != Some(module_peer) {
+        return Err(io::Error::other("module identity changed after lease setup").into());
+    }
+    verify_capability_call(&proxy).await?;
+    verify_migrated_scope_and_postlease_schema(&proxy, controller, module_peer).await?;
+
+    let a_scopes = scopes_over(&proxy, "connectors-a-marker", true, false, true).await?;
+    assert!(a_scopes.admin);
+    verify_scope_isolation_between_profiles(
+        host,
+        module_name,
+        json!({"storage_descriptor": descriptor_b.clone()}),
+        json!({"storage_descriptor": descriptor_a.clone()}),
+        controller,
+    )
+    .await?;
+    let a_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+
+    if !registration.revoke(&lease_a).await {
+        return Err(io::Error::other("profile A lease was not revoked").into());
+    }
+    verify_revoked_profile_a_read(&a_proxy, &service_peer_a).await?;
+
+    host.reinitialize(module_name, json!({"storage_descriptor": descriptor_b}))
+        .await?;
+    let b_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    assert!(get_scopes(&b_proxy, "connectors-b-marker").await?.admin);
+
+    verify_revoked_a_reinitialization(
+        host,
+        module_name,
+        json!({"storage_descriptor": descriptor_a.clone()}),
+        controller,
+    )
+    .await?;
+
+    let invalid_reinitialize = host
+        .reinitialize(
+            module_name,
+            json!({
+                "storage_descriptor": {
+                    "service_peer": ":1.999999",
+                    "registration_id": 99,
+                    "object_root": "/ai/tinyhumans/tinystorage/Leases/99"
+                }
+            }),
+        )
+        .await;
+    if invalid_reinitialize.is_ok() {
+        return Err(io::Error::other("reinitialization accepted a missing lease owner").into());
+    }
+    let still_live = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    if !get_scopes(&still_live, "connectors-b-marker").await?.admin {
+        return Err(io::Error::other("failed reinitialization replaced the live service").into());
+    }
+    assert!(registration.revoke(&lease_b).await);
+    Ok(())
+}
+
+async fn verify_migrated_scope_and_postlease_schema(
+    proxy: &tinybus::Proxy,
+    controller: &Connection,
+    module_peer: &tinybus::BusName,
+) -> VerifyResult<()> {
+    let migrated_preference = get_scopes(proxy, "gmail").await?;
+    if !migrated_preference.read || migrated_preference.write || migrated_preference.admin {
+        return Err(io::Error::other(
+            "GetUserScopes did not return the migrated nondefault value through the current lease",
+        )
+        .into());
+    }
+    let postlease_schema = MigrationModuleClient::discover(controller, module_peer).await?;
+    if postlease_schema.declaration().owner.as_str() != "connectors"
+        || postlease_schema.declaration().steps.len() != 2
+    {
+        return Err(io::Error::other(
+            "GetSchema changed or disappeared after the current storage lease was bound",
+        )
+        .into());
+    }
+    Ok(())
+}
+
+async fn verify_scope_isolation_between_profiles(
+    host: &ModuleHost,
+    module_name: &str,
+    descriptor_b: serde_json::Value,
+    descriptor_a: serde_json::Value,
+    controller: &Connection,
+) -> VerifyResult<()> {
+    host.reinitialize(module_name, descriptor_b).await?;
+    let b_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    let b_view = get_scopes(&b_proxy, "connectors-a-marker").await?;
+    assert!(b_view.read && b_view.write && !b_view.admin);
+    let b_scopes = scopes_over(&b_proxy, "connectors-b-marker", false, true, true).await?;
+    assert!(b_scopes.admin);
+
+    host.reinitialize(module_name, descriptor_a).await?;
+    let a_proxy = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    assert!(get_scopes(&a_proxy, "connectors-a-marker").await?.admin);
+    let b_in_a = get_scopes(&a_proxy, "connectors-b-marker").await?;
+    assert!(b_in_a.read && b_in_a.write && !b_in_a.admin);
+    Ok(())
+}
+
+async fn verify_revoked_a_reinitialization(
+    host: &ModuleHost,
+    module_name: &str,
+    descriptor_a: serde_json::Value,
+    controller: &Connection,
+) -> VerifyResult<()> {
+    let revoked_a_reinitialize = host.reinitialize(module_name, descriptor_a).await;
+    if revoked_a_reinitialize.is_ok() {
+        return Err(io::Error::other("a revoked profile A descriptor was reinitialized").into());
+    }
+    let still_b = controller.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    if !get_scopes(&still_b, "connectors-b-marker").await?.admin {
+        return Err(io::Error::other(
+            "failed reinitialization with revoked A replaced the live profile B service",
+        )
+        .into());
+    }
+    Ok(())
+}
+
+async fn verify_revoked_profile_a_read(
+    proxy: &tinybus::Proxy,
+    service_peer: &str,
+) -> VerifyResult<()> {
+    let revoked = proxy
+        .call::<tinyconnectors_bus::ComposioUserScopesResponse>(
+            names::methods::GET_USER_SCOPES,
+            (tinyconnectors_bus::ComposioGetUserScopesRequest {
+                toolkit: "connectors-a-marker".into(),
+            },),
+        )
+        .await;
+    let Err(error) = revoked else {
+        return Err(io::Error::other("revoked current-only storage lease was not denied").into());
+    };
+    if error.wire_name() != tinybus::Error::FAILED
+        || !error.to_string().contains("UnknownObject")
+        || error.to_string().contains(service_peer)
+    {
+        return Err(io::Error::other(format!(
+            "revoked current-only storage lease returned an unexpected error: {error}"
+        ))
+        .into());
+    }
+    Ok(())
+}
+
+async fn verify_capability_call(proxy: &tinybus::Proxy) -> VerifyResult<()> {
+    let reply: tinyconnectors_bus::ComposioCapabilitiesResponse =
+        proxy.call(names::methods::LIST_CAPABILITIES, ()).await?;
+    if reply.capabilities.is_empty() {
+        return Err(io::Error::other("compiled module returned no capabilities").into());
+    }
+    Ok(())
+}
+
+async fn scopes_over(
+    proxy: &tinybus::Proxy,
+    toolkit: &str,
+    read: bool,
+    write: bool,
+    admin: bool,
+) -> VerifyResult<tinyconnectors_bus::ComposioUserScopes> {
+    let reply: tinyconnectors_bus::ComposioUserScopesResponse = proxy
+        .call(
+            names::methods::SET_USER_SCOPES,
+            (tinyconnectors_bus::ComposioSetUserScopesRequest {
+                toolkit: toolkit.to_owned(),
+                scopes: tinyconnectors_bus::ComposioUserScopes { read, write, admin },
+            },),
+        )
+        .await?;
+    Ok(reply.scopes)
+}
+
+async fn get_scopes(
+    proxy: &tinybus::Proxy,
+    toolkit: &str,
+) -> VerifyResult<tinyconnectors_bus::ComposioUserScopes> {
+    let reply: tinyconnectors_bus::ComposioUserScopesResponse = proxy
+        .call(
+            names::methods::GET_USER_SCOPES,
+            (tinyconnectors_bus::ComposioGetUserScopesRequest {
+                toolkit: toolkit.to_owned(),
+            },),
+        )
+        .await?;
+    Ok(reply.scopes)
+}
+
+async fn seed_legacy_records(
+    scoped: &tinystoragedrivers_core::ScopedStorage,
+) -> Result<(), Box<dyn std::error::Error>> {
+    scoped
+        .documents()
+        .put_with(
+            "composio-user-scopes",
+            "gmail",
+            serde_json::json!({"value": {"read": true, "write": false, "admin": false}}),
+            Precondition::Absent,
+            WriteOptions::new()
+                .schema(1)
+                .created_ms(12345)
+                .expires_ms(9_876_543_210_000),
+        )
+        .await?;
+    scoped
+        .streams()
+        .append(
+            "triggers/2026-10-21",
+            serde_json::json!({"trigger":"daily"}),
+        )
+        .await?;
+    Ok(())
+}
+
+async fn verify_migrated_user_scope(
+    scoped: &tinystoragedrivers_core::ScopedStorage,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let target_id = tinystoragedrivers_core::Key::of(["gmail"])?;
+    let migrated = scoped
+        .documents()
+        .get("connectors.user_scopes", target_id.as_str())
+        .await?
+        .ok_or_else(|| io::Error::other("user scope was not migrated"))?;
+    if migrated.doc != serde_json::json!({"read": true, "write": false, "admin": false})
+        || migrated.meta.created_ms != 12345
+        || migrated.meta.expires_ms != Some(9_876_543_210_000)
+        || scoped
+            .documents()
+            .get("composio-user-scopes", "gmail")
+            .await?
+            .is_some()
+    {
+        return Err(
+            io::Error::other("user scope migration did not preserve data and metadata").into(),
+        );
+    }
+    Ok(())
+}
+
+async fn verify_migrated_trigger_stream(
+    scoped: &tinystoragedrivers_core::ScopedStorage,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let trigger_streams = scoped.streams().streams("connectors.triggers/").await?;
+    if trigger_streams != ["connectors.triggers/2026-10-21"]
+        || scoped
+            .streams()
+            .streams("triggers/")
+            .await?
+            .contains(&"triggers/2026-10-21".to_owned())
+        || scoped
+            .streams()
+            .read_window("connectors.triggers/2026-10-21", 0, 10)
+            .await?
+            .first()
+            .is_none_or(|entry| entry.value != serde_json::json!({"trigger":"daily"}))
+    {
+        return Err(io::Error::other("trigger stream migration did not move its data").into());
+    }
+    Ok(())
+}
+
+async fn verify_unselected_migration_fails_closed() -> Result<(), Box<dyn std::error::Error>> {
+    let (module_host, _, broker_task) = tinybus::test_support::start_bus().await?;
+    let info = tinybus::test_support::admit_module(
+        &module_host,
+        "TINYCONNECTORS_TEST_MODULE",
+        env!("CARGO_PKG_NAME"),
+    )?;
+    if module_host
+        .ensure_ready(info.manifest.bus_name.as_str())
+        .await
+        .is_ok()
+    {
+        return Err(io::Error::other("migration module setup accepted an unselected host").into());
+    }
+    broker_task.abort();
+    Ok(())
+}
+
 /// Load another instance with an immutable mode and verify deny-by-default dispatch.
 async fn verify_restricted_surface(
     module: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let bus = tinybus::transport::memory::MemoryBus::new();
-    let broker = Broker::new();
+    let broker = Broker::new_restricted_module_control();
     let task = broker.clone().spawn(bus.clone());
+    let (host_transport, controller_transport) = MemoryTransport::pair();
+    broker.attach_module_controller(std::sync::Arc::new(host_transport))?;
+    let _controller = Connection::connect(Box::new(controller_transport)).await?;
     let host = ModuleHost::new(broker);
     host.load_file_with_config(
         module,
@@ -139,6 +682,23 @@ async fn verify_restricted_surface(
     Ok(())
 }
 
+async fn start_selected_bus() -> Result<
+    (
+        ModuleHost,
+        Connection,
+        tokio::task::JoinHandle<tinybus::Result<()>>,
+    ),
+    Box<dyn std::error::Error>,
+> {
+    let bus = tinybus::transport::memory::MemoryBus::new();
+    let broker = Broker::new_restricted_module_control();
+    let task = broker.clone().spawn(bus.clone());
+    let (host_transport, controller_transport) = MemoryTransport::pair();
+    broker.attach_module_controller(std::sync::Arc::new(host_transport))?;
+    let controller = Connection::connect(Box::new(controller_transport)).await?;
+    Ok((ModuleHost::new(broker), controller, task))
+}
+
 /// Wait until the module claims its bus name, then check that its manifest
 /// declares exactly the members the contract does.
 ///
@@ -148,6 +708,28 @@ async fn verify_served_surface(
     client: &Connection,
     info: &ModuleInfo,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let provided: Vec<&str> = info
+        .manifest
+        .provides
+        .iter()
+        .map(|interface| interface.version.interface.as_str())
+        .collect();
+    if provided != [names::INTERFACE, MIGRATION_INTERFACE] {
+        return Err(io::Error::other(format!(
+            "module provides {provided:?} instead of the connector interface followed by migration"
+        ))
+        .into());
+    }
+    if info
+        .manifest
+        .provides
+        .get(1)
+        .is_none_or(|migration| !migration.methods.is_empty())
+    {
+        return Err(
+            io::Error::other("migration members leaked into the secondary interface").into(),
+        );
+    }
     let declared: Vec<String> = info
         .manifest
         .provides

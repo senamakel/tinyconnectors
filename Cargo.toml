@@ -33,21 +33,21 @@ repository = "https://github.com/tinyhumansai/tinyconnectors"
 tinyconnectors-bus = { path = "crates/tinyconnectors-bus" }
 # Canonical storage-needs schemas for module declarations. Disable the legacy
 # TinyBus client: this data contract only needs the type definitions.
-tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "c9ea6ff1615b77b55d7269403af5fd11bedc9ce8", default-features = false }
+tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b", default-features = false }
 # The provider registry, scope catalogs and scope preferences. The module crate
 # depends on it for the capability, profile and user-scope members, which are
 # answered from what the registered providers know. It stays a separate crate so
 # it keeps its own dependency rules — no transport, no storage engine.
 tinyconnectors-sync = { path = "crates/tinyconnectors-sync" }
-# TinyBus 0.3.3 matches the published SDK selected for the host native module
+# TinyBus 0.3.11 matches the published SDK selected for the host native module
 # runtime. Socket and CLI features are unnecessary here.
-tinybus = { version = "0.3.3", default-features = false, features = [
+tinybus = { version = "0.3.11", default-features = false, features = [
     "macros",
     "modules",
 ] }
 # The module-side SDK owns the isolated runtime and exports the ABI entrypoints
 # required by TinyBus's dynamic loader.
-tinybus-module = "0.3.3"
+tinybus-module = "0.3.11"
 
 # Derive macros for the crate-wide error type in `crates/tinyconnectors/src/error/`.
 # Every dependency entry should carry a comment like this one saying why it is
@@ -94,14 +94,17 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 # The storage ports (documents, streams) the scope preferences and the trigger
 # archive are written through. Ports only: no driver crate, no database client.
 # A tag so a host that vendors tinystoragedrivers once can `[patch]` it.
-tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0", default-features = false }
+tinystoragedrivers-core = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b", default-features = false, features = ["migration-delivery"] }
 # The module's side of the storage bus: `connect_storage` hands back the same
 # port traits over the module's TinyBus connection, so the host's backend (not a
 # process-local registry) is what the cdylib reads and writes. The host side of
 # the same crate (`serve`) is what the loopback tests stand up.
-tinystoragedrivers-busproxy = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0" }
+tinystoragedrivers-busproxy = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b" }
 # `StorageServer` binds a scope to a backend; dev-only, for the loopback host.
-tinystoragedrivers-client = { git = "https://github.com/tinyhumansai/tinystoragedrivers", tag = "v1.0.0" }
+tinystoragedrivers-client = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b" }
+
+# The compiled module's confidential schema and owner-transform endpoint.
+tinystoragedrivers-tinybus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "a04e3a174fa8f28d5229a816ca6b39c72a9efd7b", features = ["migration-delivery"] }
 
 # Lints apply to every member that opts in with `[lints] workspace = true`, and
 # to every target of that member. CI runs clippy with `-D warnings`, so anything
@@ -148,3 +151,4 @@ tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }
 # vendored checkout so the module and the storage client share one `Connection`.
 [patch."https://github.com/tinyhumansai/tinybus"]
 tinybus = { path = "vendor/tinybus/crates/tinybus" }
+tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }

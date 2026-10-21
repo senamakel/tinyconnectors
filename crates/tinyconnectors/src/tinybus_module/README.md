@@ -20,14 +20,20 @@ it without deleting data. Leases are bounded, unknown/closed handles fail, and
 module shutdown drops the table. Hosts close the old user's lease when switching
 identity. Existing load-time `ListTriggerHistory` remains compatible. Records
 live in the host's tinystoragedrivers stream and document stores, reached over
-the storage bus (`tinystoragedrivers-busproxy::connect_storage`); the grant the
-host requests through the data-only `STORAGE_NEEDS` contract: collection
-`connectors.user_scopes` and stream prefix `connectors.triggers/`. The v1-to-v2
-schema and migration callbacks live in the TinyConnectors implementation, not
-the bus contract. The released TSD API does not yet exchange those callbacks
-with a compiled module; publish that owner-side exchange before the host
-adapter adopts current-only grants. The module itself continues to read and
-write only current names; existing member arities are unchanged.
+the storage bus; without a bound lease the module retains its existing lazy
+`tinystoragedrivers-busproxy::connect_storage` path and ephemeral preference
+fallback. A host that has admitted the module may reinitialize it with the
+host-issued `storage_descriptor` for a current-only lease. The module validates
+that route before replacing its connector service, and storage failures on a
+configured lease remain errors rather than falling back to memory. Migration
+discovery and exchange still happen before ordinary storage is attached. The
+grant the host requests through the data-only `STORAGE_NEEDS` contract names
+collection `connectors.user_scopes` and stream prefix
+`connectors.triggers/`. The v1-to-v2 schema and migration callbacks live in the
+TinyConnectors implementation, not the bus contract. A compatible TSD release
+must provide the compiled-module migration exchange and current-only lease API
+used by the host adapter. The module itself continues to read and write only
+current names; existing member arities are unchanged.
 
 The dynamic verifier exercises preparation and filtering with local payloads.
 Hosts must wait for a published compatible artifact with a verified digest
