@@ -155,7 +155,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         manifest = (ROOT / "Cargo.toml").read_text()
         self.assertEqual(
             tomllib.loads(manifest)["workspace"]["package"]["version"],
-            "0.21.0",
+            "0.21.1",
         )
         self.assertIn(
             'tinystoragedrivers-bus = { git = "https://github.com/tinyhumansai/tinystoragedrivers", '
