@@ -1229,11 +1229,11 @@ async fn setup_with_context(
 ) -> TinyBusResult<()> {
     let connection = context.connection().clone();
     let storage = storage::StorageLink::new(connection.clone(), config.storage_descriptor.clone());
+    migration::setup(&context).await?;
     storage
         .prepare_if_bound()
         .await
         .map_err(|_| tinybus::Error::failed("configured storage route is unavailable"))?;
-    migration::setup(&context).await?;
     setup_with_storage(connection, config, storage).await
 }
 

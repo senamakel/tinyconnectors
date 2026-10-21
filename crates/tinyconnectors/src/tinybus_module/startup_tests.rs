@@ -186,7 +186,7 @@ async fn initial_bound_storage_setup_discovers_connector_migrations()
     broker.attach_module_controller(Arc::new(broker_transport))?;
     let controller = Connection::connect(Box::new(controller_transport)).await?;
     let broker_task = broker.spawn(bus.clone());
-    let mut host = ModuleHost::new(broker);
+    let host = ModuleHost::new(broker);
     host.set_pre_ready_confidential_routes(vec![
         PreReadyConfidentialRoute {
             path: ObjectPath::new(MIGRATION_OBJECT_PATH)?,
