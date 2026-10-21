@@ -11,15 +11,15 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::sync::{Arc, Mutex};
 use std::io::Cursor;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use serde_json::json;
 
 use super::{ComposioClient, ProxyRoute, Transport};
-use crate::{Error, Result};
 use crate::client::test_support::read_request_from;
+use crate::{Error, Result};
 
 /// One recorded request.
 #[derive(Debug, Clone, PartialEq, Eq)]
