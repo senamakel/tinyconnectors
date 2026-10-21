@@ -61,7 +61,7 @@ impl Environment<MigrationSetupContext> for MigrationSetupEnvironment {
             .for_scope(&Scope::local())
             .map_err(|_| HostFailure::Denied("test-storage-unavailable"))?;
         let grant = StorageGrant::from_needs(
-            (*tinyconnectors_bus::STORAGE_NEEDS).clone(),
+            *tinyconnectors_bus::STORAGE_NEEDS,
             &GrantPolicy::default(),
         )
         .map_err(|_| HostFailure::Denied("connector-storage-grant-invalid"))?;
