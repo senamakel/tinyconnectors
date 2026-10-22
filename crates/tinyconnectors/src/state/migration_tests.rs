@@ -1020,6 +1020,16 @@ async fn legacy_preferences_without_a_value_migrate_as_null() {
         )
         .await
         .unwrap();
+    storage
+        .documents()
+        .put(
+            LEGACY_PREFS_NAMESPACE,
+            "non-object-value",
+            json!("legacy scalar"),
+            Precondition::Absent,
+        )
+        .await
+        .unwrap();
     prepare(&storage).await.unwrap();
 
     assert_eq!(
@@ -1032,6 +1042,17 @@ async fn legacy_preferences_without_a_value_migrate_as_null() {
             .doc,
         encode_preference(&Value::Null),
         "legacy entries without a `value` retain the old null fallback"
+    );
+    assert_eq!(
+        storage
+            .documents()
+            .get(PREFS_NAMESPACE, "non-object-value")
+            .await
+            .unwrap()
+            .unwrap()
+            .doc,
+        encode_preference(&Value::Null),
+        "non-object legacy entries retain the old null fallback"
     );
 }
 
