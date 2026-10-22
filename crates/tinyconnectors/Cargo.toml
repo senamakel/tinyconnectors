@@ -60,8 +60,11 @@ percent-encoding = { workspace = true }
 # The storage ports the preferences (documents) and trigger archive (streams)
 # are written through.
 tinystoragedrivers-types = { workspace = true }
+# Implements the owner-local preference and stream migrations over the ports.
 tinystoragedrivers-api = { workspace = true }
+# Hashes oversized legacy preference keys before storing them under TSD limits.
 sha2 = { workspace = true }
+# Encodes the legacy-key digest as the stable base32 storage identifier.
 data-encoding = { workspace = true }
 # The module's connection to the host's storage bus (`connect_storage`). Tied to
 # the `module` feature because it needs the TinyBus `Connection` that feature
