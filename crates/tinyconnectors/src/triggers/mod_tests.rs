@@ -260,8 +260,18 @@ async fn deduplicates_only_matching_legacy_copies_at_the_same_offset() {
 
     let history = archive.list_recent(None).await.expect("reads archive");
     assert_eq!(history.entries.len(), 2);
-    assert!(history.entries.iter().any(|entry| entry.payload["copy"] == true));
-    assert!(history.entries.iter().any(|entry| entry.payload["copy"] == false));
+    assert!(
+        history
+            .entries
+            .iter()
+            .any(|entry| entry.payload["copy"] == true)
+    );
+    assert!(
+        history
+            .entries
+            .iter()
+            .any(|entry| entry.payload["copy"] == false)
+    );
 }
 
 #[tokio::test]

@@ -381,7 +381,7 @@ async fn migrate_streams(streams: &dyn StreamStore) -> tinystoragedrivers_types:
         // Keep the legacy source after copying. StreamStore has no
         // compare-and-delete operation, so a legacy writer could append after
         // the final length check and before deletion. Trigger history reads
-        // both prefixes and deduplicates the copied entries by event identity.
+        // both prefixes and deduplicates exact copies by day, offset, and value.
     }
     Ok(())
 }
