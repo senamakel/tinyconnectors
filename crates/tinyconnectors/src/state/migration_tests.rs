@@ -19,6 +19,9 @@ struct CommitThenConflictMarker {
     update_legacy_after_target_write: std::sync::atomic::AtomicBool,
     delete_legacy_after_target_write: std::sync::atomic::AtomicBool,
     update_legacy_on_paged_query: std::sync::atomic::AtomicBool,
+    delete_legacy_on_paged_query: std::sync::atomic::AtomicBool,
+    update_target_on_paged_query: std::sync::atomic::AtomicBool,
+    conflict_target_reconciliation: std::sync::atomic::AtomicBool,
 }
 
 #[tinystoragedrivers_api::async_trait]
@@ -106,6 +109,21 @@ impl tinystoragedrivers_api::DocumentStore for CommitThenConflictMarker {
         precondition: tinystoragedrivers_types::Precondition,
         options: tinystoragedrivers_types::WriteOptions,
     ) -> tinystoragedrivers_types::Result<tinystoragedrivers_types::Version> {
+        if collection == PREFS_NAMESPACE
+            && matches!(precondition, tinystoragedrivers_types::Precondition::Version(_))
+            && self
+                .conflict_target_reconciliation
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.inner
+                .put(
+                    PREFS_NAMESPACE,
+                    id,
+                    json!({"concurrent_target_update": true}),
+                    tinystoragedrivers_types::Precondition::None,
+                )
+                .await?;
+        }
         let version = self
             .inner
             .put_with(collection, id, value, precondition, options)
@@ -168,6 +186,35 @@ impl tinystoragedrivers_api::DocumentStore for CommitThenConflictMarker {
                     LEGACY_PREFS_NAMESPACE,
                     "aaa",
                     json!({"value": {"updated_during_paging": true}}),
+                    tinystoragedrivers_types::Precondition::None,
+                )
+                .await?;
+        }
+        if collection == LEGACY_PREFS_NAMESPACE
+            && query.cursor.is_some()
+            && self
+                .delete_legacy_on_paged_query
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.inner
+                .delete(
+                    LEGACY_PREFS_NAMESPACE,
+                    "aaa",
+                    tinystoragedrivers_types::Precondition::None,
+                )
+                .await?;
+        }
+        if collection == LEGACY_PREFS_NAMESPACE
+            && query.cursor.is_some()
+            && self
+                .update_target_on_paged_query
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.inner
+                .put(
+                    PREFS_NAMESPACE,
+                    "aaa",
+                    json!({"concurrent_target_update": true}),
                     tinystoragedrivers_types::Precondition::None,
                 )
                 .await?;
