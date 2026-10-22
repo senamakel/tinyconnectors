@@ -629,7 +629,7 @@ async fn preference_reconciliation_removes_a_target_for_a_late_legacy_delete() {
         delete_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
         update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(true),
-        update_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        update_target_on_paged_query: std::sync::atomic::AtomicBool::new(true),
         conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
@@ -642,12 +642,14 @@ async fn preference_reconciliation_removes_a_target_for_a_late_legacy_delete() {
     );
 
     prepare(&storage).await.unwrap();
-    assert!(
+    assert_eq!(
         base.documents()
             .get(PREFS_NAMESPACE, "aaa")
             .await
             .unwrap()
-            .is_none()
+            .unwrap()
+            .doc,
+        json!({"concurrent_target_update": true})
     );
 }
 
