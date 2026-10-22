@@ -233,6 +233,38 @@ async fn reads_across_more_than_one_day() {
 }
 
 #[tokio::test]
+async fn deduplicates_only_matching_legacy_copies_at_the_same_offset() {
+    let (streams, archive) = archive();
+    let legacy = json!({
+        "received_at_ms": 1, "toolkit": "gmail", "trigger": "T",
+        "metadata_id": "retry", "metadata_uuid": "same", "payload": {"copy": true}
+    });
+    streams
+        .append("connectors.triggers/2000-01-01", legacy.clone())
+        .await
+        .expect("append legacy entry");
+    streams
+        .append("connectors.triggers-v1/2000-01-01", legacy.clone())
+        .await
+        .expect("append migrated copy at the same offset");
+    streams
+        .append(
+            "connectors.triggers-v1/2000-01-01",
+            json!({
+                "received_at_ms": 2, "toolkit": "gmail", "trigger": "T",
+                "metadata_id": "retry", "metadata_uuid": "same", "payload": {"copy": false}
+            }),
+        )
+        .await
+        .expect("append distinct delivery sharing metadata");
+
+    let history = archive.list_recent(None).await.expect("reads archive");
+    assert_eq!(history.entries.len(), 2);
+    assert!(history.entries.iter().any(|entry| entry.payload["copy"] == true));
+    assert!(history.entries.iter().any(|entry| entry.payload["copy"] == false));
+}
+
+#[tokio::test]
 async fn concurrent_deliveries_are_all_kept() {
     let (_, archive) = archive();
     let mut tasks = Vec::new();
