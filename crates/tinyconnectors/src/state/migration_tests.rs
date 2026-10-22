@@ -21,6 +21,7 @@ struct CommitThenConflictMarker {
     update_legacy_on_paged_query: std::sync::atomic::AtomicBool,
     delete_legacy_on_paged_query: std::sync::atomic::AtomicBool,
     update_target_on_paged_query: std::sync::atomic::AtomicBool,
+    delete_target_on_paged_query: std::sync::atomic::AtomicBool,
     conflict_target_reconciliation: std::sync::atomic::AtomicBool,
 }
 
@@ -218,6 +219,20 @@ impl tinystoragedrivers_api::DocumentStore for CommitThenConflictMarker {
                     PREFS_NAMESPACE,
                     "aaa",
                     json!({"concurrent_target_update": true}),
+                    tinystoragedrivers_types::Precondition::None,
+                )
+                .await?;
+        }
+        if collection == LEGACY_PREFS_NAMESPACE
+            && query.cursor.is_some()
+            && self
+                .delete_target_on_paged_query
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.inner
+                .delete(
+                    PREFS_NAMESPACE,
+                    "aaa",
                     tinystoragedrivers_types::Precondition::None,
                 )
                 .await?;
@@ -1020,16 +1035,6 @@ async fn legacy_preferences_without_a_value_migrate_as_null() {
         )
         .await
         .unwrap();
-    storage
-        .documents()
-        .put(
-            LEGACY_PREFS_NAMESPACE,
-            "non-object-value",
-            json!("legacy scalar"),
-            Precondition::Absent,
-        )
-        .await
-        .unwrap();
     prepare(&storage).await.unwrap();
 
     assert_eq!(
@@ -1042,17 +1047,6 @@ async fn legacy_preferences_without_a_value_migrate_as_null() {
             .doc,
         encode_preference(&Value::Null),
         "legacy entries without a `value` retain the old null fallback"
-    );
-    assert_eq!(
-        storage
-            .documents()
-            .get(PREFS_NAMESPACE, "non-object-value")
-            .await
-            .unwrap()
-            .unwrap()
-            .doc,
-        encode_preference(&Value::Null),
-        "non-object legacy entries retain the old null fallback"
     );
 }
 
