@@ -1,6 +1,7 @@
 //! Owner-local migration of the connector module's persisted records.
 
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use tinystoragedrivers_api::{DocumentStore, Storage, StreamStore};
 use tinystoragedrivers_types::{
     CollectionSpec, Key, Precondition, Query, StorageError, Version, Versioned, WriteOptions,
@@ -90,6 +91,7 @@ async fn migrate_preferences(
     documents: &dyn DocumentStore,
 ) -> tinystoragedrivers_types::Result<()> {
     let mut query = Query::all().limit(PAGE_SIZE);
+    let mut migrated_targets = HashMap::new();
     loop {
         let page = documents.query(LEGACY_PREFS_NAMESPACE, &query).await?;
         if page.items.is_empty() {
@@ -97,11 +99,20 @@ async fn migrate_preferences(
         }
         let next = page.next.clone();
         for record in page.items {
+            let source_id = record.id.clone();
             let id = legacy_key([record.id.as_str()])?;
-            migrate_preference(documents, &id, record).await?;
+            if let Some(target_version) = migrate_preference(documents, &id, record).await? {
+                migrated_targets.insert(source_id, (id, target_version));
+            }
         }
         let Some(cursor) = next else { break };
         query.cursor = Some(cursor);
+    }
+    // A legacy writer can update a row after its page was copied but before
+    // pagination reaches the end. Reconcile every target written by this pass
+    // once more immediately before recording the migration marker.
+    for (source_id, (id, target_version)) in migrated_targets {
+        reconcile_preference(documents, &source_id, &id, target_version).await?;
     }
     Ok(())
 }
@@ -110,7 +121,7 @@ async fn migrate_preference(
     documents: &dyn DocumentStore,
     id: &Key,
     mut source: Versioned<Value>,
-) -> tinystoragedrivers_types::Result<()> {
+) -> tinystoragedrivers_types::Result<Option<Version>> {
     let body = preference_body(&source);
     let expires_ms = source.meta.expires_ms;
     let mut target_version = match put_preference(
@@ -135,7 +146,7 @@ async fn migrate_preference(
                     preference_id = id.as_str(),
                     "preserving conflicting connector preference target"
                 );
-                return Ok(());
+                return Ok(None);
             }
             current.version
         }
@@ -167,12 +178,12 @@ async fn migrate_preference(
                 }
                 Err(error) => return Err(error),
             }
-            return Ok(());
+            return Ok(None);
         };
         if preference_body(&latest) == preference_body(&source)
             && latest.meta.expires_ms == source.meta.expires_ms
         {
-            return Ok(());
+            return Ok(Some(target_version));
         }
         let latest_body = preference_body(&latest);
         match put_preference(
@@ -193,6 +204,66 @@ async fn migrate_preference(
                     preference_id = id.as_str(),
                     "preserving a preference changed while its legacy source was being migrated"
                 );
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+async fn reconcile_preference(
+    documents: &dyn DocumentStore,
+    source_id: &str,
+    id: &Key,
+    mut target_version: Version,
+) -> tinystoragedrivers_types::Result<()> {
+    loop {
+        let Some(source) = documents.get(LEGACY_PREFS_NAMESPACE, source_id).await? else {
+            match documents
+                .delete(
+                    PREFS_NAMESPACE,
+                    id.as_str(),
+                    Precondition::Version(target_version),
+                )
+                .await
+            {
+                Ok(_) => {}
+                Err(error) if error.kind() == tinystoragedrivers_types::ErrorKind::Conflict => {
+                    tracing::warn!(
+                        preference_id = id.as_str(),
+                        "preserving a preference changed after legacy deletion"
+                    );
+                }
+                Err(error) => return Err(error),
+            }
+            return Ok(());
+        };
+        let current = documents.get(PREFS_NAMESPACE, id.as_str()).await?;
+        let Some(current) = current else {
+            return Err(StorageError::conflict(
+                "connector preference target disappeared during reconciliation",
+            ));
+        };
+        if current.version != target_version {
+            // A target updated after the first pass is authoritative. Do not
+            // overwrite a newer module write with the legacy snapshot.
+            return Ok(());
+        }
+        let body = preference_body(&source);
+        if current.doc == body && current.meta.expires_ms == source.meta.expires_ms {
+            return Ok(());
+        }
+        match put_preference(
+            documents,
+            id,
+            body,
+            source.meta.expires_ms,
+            Precondition::Version(target_version),
+        )
+        .await
+        {
+            Ok(version) => target_version = version,
+            Err(error) if error.kind() == tinystoragedrivers_types::ErrorKind::Conflict => {
                 return Ok(());
             }
             Err(error) => return Err(error),

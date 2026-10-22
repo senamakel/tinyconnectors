@@ -18,6 +18,7 @@ struct CommitThenConflictMarker {
     drop_marker_before_conflict: std::sync::atomic::AtomicBool,
     update_legacy_after_target_write: std::sync::atomic::AtomicBool,
     delete_legacy_after_target_write: std::sync::atomic::AtomicBool,
+    update_legacy_on_paged_query: std::sync::atomic::AtomicBool,
 }
 
 #[tinystoragedrivers_api::async_trait]
@@ -155,7 +156,23 @@ impl tinystoragedrivers_api::DocumentStore for CommitThenConflictMarker {
     ) -> tinystoragedrivers_types::Result<
         tinystoragedrivers_types::Page<tinystoragedrivers_types::Versioned<Value>>,
     > {
-        self.inner.query(collection, query).await
+        let page = self.inner.query(collection, query).await?;
+        if collection == LEGACY_PREFS_NAMESPACE
+            && query.cursor.is_some()
+            && self
+                .update_legacy_on_paged_query
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.inner
+                .put(
+                    LEGACY_PREFS_NAMESPACE,
+                    "aaa",
+                    json!({"value": {"updated_during_paging": true}}),
+                    tinystoragedrivers_types::Precondition::None,
+                )
+                .await?;
+        }
+        Ok(page)
     }
 
     async fn count(
@@ -352,6 +369,7 @@ async fn completion_marker_conflict_accepts_the_valid_marker_written_by_a_racer(
         drop_marker_before_conflict: std::sync::atomic::AtomicBool::new(false),
         update_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
+        update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
         documents,
@@ -390,6 +408,7 @@ async fn completion_marker_conflict_without_a_committed_marker_is_returned() {
         drop_marker_before_conflict: std::sync::atomic::AtomicBool::new(true),
         update_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
+        update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
         documents,
@@ -430,6 +449,7 @@ async fn preference_migration_follows_a_legacy_update_after_the_initial_copy() {
         drop_marker_before_conflict: std::sync::atomic::AtomicBool::new(false),
         update_legacy_after_target_write: std::sync::atomic::AtomicBool::new(true),
         delete_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
+        update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
         documents,
@@ -449,6 +469,64 @@ async fn preference_migration_follows_a_legacy_update_after_the_initial_copy() {
             .unwrap()
             .doc,
         json!({"updated_during_migration": true})
+    );
+}
+
+#[tokio::test]
+async fn preference_migration_reconciles_a_row_changed_on_a_later_page() {
+    use tinystoragedrivers_api::{Storage, StorageBackend};
+    use tinystoragedrivers_testkit::MemoryBackend;
+    use tinystoragedrivers_types::{Precondition, Scope};
+
+    let base = MemoryBackend::new()
+        .for_scope(&Scope::new("connector-preference-paging-race").unwrap())
+        .unwrap();
+    base.documents()
+        .put(
+            LEGACY_PREFS_NAMESPACE,
+            "aaa",
+            json!({"value": {"initial": true}}),
+            Precondition::Absent,
+        )
+        .await
+        .unwrap();
+    for index in 0..128 {
+        base.documents()
+            .put(
+                LEGACY_PREFS_NAMESPACE,
+                &format!("row-{index:03}"),
+                json!({"value": {"index": index}}),
+                Precondition::Absent,
+            )
+            .await
+            .unwrap();
+    }
+    let documents = std::sync::Arc::new(CommitThenConflictMarker {
+        inner: base.documents().clone(),
+        pending: std::sync::atomic::AtomicBool::new(false),
+        drop_marker_before_conflict: std::sync::atomic::AtomicBool::new(false),
+        update_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
+        delete_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
+        update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(true),
+    });
+    let storage = Storage::new(
+        documents,
+        base.streams().clone(),
+        base.kv().clone(),
+        base.blobs().clone(),
+        base.queues().clone(),
+        base.secrets().clone(),
+    );
+
+    prepare(&storage).await.unwrap();
+    assert_eq!(
+        base.documents()
+            .get(PREFS_NAMESPACE, "aaa")
+            .await
+            .unwrap()
+            .unwrap()
+            .doc,
+        json!({"updated_during_paging": true})
     );
 }
 
@@ -476,6 +554,7 @@ async fn preference_migration_drops_a_target_when_the_legacy_row_was_deleted() {
         drop_marker_before_conflict: std::sync::atomic::AtomicBool::new(false),
         update_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_after_target_write: std::sync::atomic::AtomicBool::new(true),
+        update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
         documents,
