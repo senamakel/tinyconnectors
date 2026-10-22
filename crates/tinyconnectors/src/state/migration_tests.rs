@@ -110,7 +110,10 @@ impl tinystoragedrivers_api::DocumentStore for CommitThenConflictMarker {
         options: tinystoragedrivers_types::WriteOptions,
     ) -> tinystoragedrivers_types::Result<tinystoragedrivers_types::Version> {
         if collection == PREFS_NAMESPACE
-            && matches!(precondition, tinystoragedrivers_types::Precondition::Version(_))
+            && matches!(
+                precondition,
+                tinystoragedrivers_types::Precondition::Version(_)
+            )
             && self
                 .conflict_target_reconciliation
                 .swap(false, std::sync::atomic::Ordering::SeqCst)
@@ -639,7 +642,13 @@ async fn preference_reconciliation_removes_a_target_for_a_late_legacy_delete() {
     );
 
     prepare(&storage).await.unwrap();
-    assert!(base.documents().get(PREFS_NAMESPACE, "aaa").await.unwrap().is_none());
+    assert!(
+        base.documents()
+            .get(PREFS_NAMESPACE, "aaa")
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
