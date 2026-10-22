@@ -163,7 +163,20 @@ impl TriggerArchive {
                     else {
                         continue;
                     };
-                    let key = archive_entry_key(&entry);
+                    // Migration copies retain the source offset. Deduplicate
+                    // only matching records at the same day and offset across
+                    // the legacy and current stream names; metadata values
+                    // alone are not unique delivery identifiers.
+                    let day = stream
+                        .strip_prefix(STREAM_PREFIX)
+                        .or_else(|| stream.strip_prefix(LEGACY_STREAM_PREFIX))
+                        .unwrap_or(&stream)
+                        .to_owned();
+                    let key = (
+                        day,
+                        record.offset,
+                        serde_json::to_string(&entry).unwrap_or_default(),
+                    );
                     if seen.insert(key) {
                         stream_entries += 1;
                         entries.push(entry);
@@ -194,14 +207,6 @@ impl TriggerArchive {
             }
         }
         Ok(())
-    }
-}
-
-fn archive_entry_key(entry: &ComposioTriggerHistoryEntry) -> String {
-    if entry.metadata_uuid.is_empty() {
-        serde_json::to_string(entry).unwrap_or_default()
-    } else {
-        format!("{}:{}", entry.metadata_id, entry.metadata_uuid)
     }
 }
 
