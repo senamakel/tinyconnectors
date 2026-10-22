@@ -437,6 +437,7 @@ async fn completion_marker_conflict_accepts_the_valid_marker_written_by_a_racer(
         update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         update_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        delete_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
@@ -479,6 +480,7 @@ async fn completion_marker_conflict_without_a_committed_marker_is_returned() {
         update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         update_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        delete_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
@@ -523,6 +525,7 @@ async fn preference_migration_follows_a_legacy_update_after_the_initial_copy() {
         update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         update_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        delete_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
@@ -584,6 +587,7 @@ async fn preference_migration_reconciles_a_row_changed_on_a_later_page() {
         update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(true),
         delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         update_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        delete_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
@@ -645,6 +649,7 @@ async fn preference_reconciliation_removes_a_target_for_a_late_legacy_delete() {
         update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(true),
         update_target_on_paged_query: std::sync::atomic::AtomicBool::new(true),
+        delete_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
@@ -706,6 +711,7 @@ async fn preference_reconciliation_preserves_a_newer_target() {
         update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         update_target_on_paged_query: std::sync::atomic::AtomicBool::new(true),
+        delete_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
@@ -767,6 +773,7 @@ async fn preference_reconciliation_ignores_a_conditional_write_conflict() {
         update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(true),
         delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         update_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        delete_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(true),
     });
     let storage = Storage::new(
@@ -788,6 +795,61 @@ async fn preference_reconciliation_ignores_a_conditional_write_conflict() {
             .doc,
         json!({"concurrent_target_update": true})
     );
+}
+
+#[tokio::test]
+async fn preference_reconciliation_reports_a_missing_target() {
+    use tinystoragedrivers_api::{Storage, StorageBackend};
+    use tinystoragedrivers_testkit::MemoryBackend;
+    use tinystoragedrivers_types::{ErrorKind, Precondition, Scope};
+
+    let base = MemoryBackend::new()
+        .for_scope(&Scope::new("connector-preference-paged-target-delete").unwrap())
+        .unwrap();
+    base.documents()
+        .put(
+            LEGACY_PREFS_NAMESPACE,
+            "aaa",
+            json!({"value": {"initial": true}}),
+            Precondition::Absent,
+        )
+        .await
+        .unwrap();
+    for index in 0..128 {
+        base.documents()
+            .put(
+                LEGACY_PREFS_NAMESPACE,
+                &format!("row-{index:03}"),
+                json!({"value": {"index": index}}),
+                Precondition::Absent,
+            )
+            .await
+            .unwrap();
+    }
+    let documents = std::sync::Arc::new(CommitThenConflictMarker {
+        inner: base.documents().clone(),
+        pending: std::sync::atomic::AtomicBool::new(false),
+        drop_marker_before_conflict: std::sync::atomic::AtomicBool::new(false),
+        update_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
+        delete_legacy_after_target_write: std::sync::atomic::AtomicBool::new(false),
+        update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        update_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        delete_target_on_paged_query: std::sync::atomic::AtomicBool::new(true),
+        conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(false),
+    });
+    let storage = Storage::new(
+        documents,
+        base.streams().clone(),
+        base.kv().clone(),
+        base.blobs().clone(),
+        base.queues().clone(),
+        base.secrets().clone(),
+    );
+
+    let error = prepare(&storage).await.unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Conflict);
+    assert!(error.message().contains("target disappeared"));
 }
 
 #[tokio::test]
@@ -817,6 +879,7 @@ async fn preference_migration_drops_a_target_when_the_legacy_row_was_deleted() {
         update_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         delete_legacy_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         update_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
+        delete_target_on_paged_query: std::sync::atomic::AtomicBool::new(false),
         conflict_target_reconciliation: std::sync::atomic::AtomicBool::new(false),
     });
     let storage = Storage::new(
